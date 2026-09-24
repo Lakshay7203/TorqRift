@@ -58,6 +58,7 @@ void ProcessInput(
                 input.jumpPressed = true;
             }
         }
+
     }
 
     const bool* keyboardState =
