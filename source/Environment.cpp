@@ -1,4 +1,5 @@
 #include "Environment.h"
+#include <cmath>
 
 
 // ---------------------------------------------------------
@@ -197,11 +198,18 @@ Environment::Environment()
 // UPDATE
 // ---------------------------------------------------------
 
-void Environment::Update(float newPlayerX)
+void Environment::Update(
+    float newPlayerX,
+    float deltaTime
+)
 {
     playerX =
         newPlayerX;
+
+    animationTime +=
+        deltaTime;
 }
+
 
 
 // ---------------------------------------------------------
@@ -821,6 +829,10 @@ void Environment::Render(
         renderer
     );
 
+    RenderMoonGlow(
+        renderer
+    );
+
     RenderMoon(
         renderer
     );
@@ -1095,6 +1107,10 @@ void Environment::Render(
         renderer,
         cameraX,
         currentTheme
+    );
+
+    RenderFireflies(
+        renderer
     );
 }
 
@@ -1721,4 +1737,200 @@ void Environment::RenderFarHills(
         indices,
         15
     );
+}
+
+void Environment::RenderMoonGlow(
+    SDL_Renderer* renderer
+) const
+{
+    if (playerX < 190.0f)
+    {
+        return;
+    }
+
+
+    float fade =
+        Clamp01(
+            (playerX - 190.0f) /
+            80.0f
+        );
+
+
+    const float moonX =
+        850.0f;
+
+    const float moonY =
+        120.0f;
+
+
+    SDL_Color outerGlow =
+    {
+        160,
+        185,
+        235,
+        static_cast<Uint8>(
+            25.0f * fade
+        )
+    };
+
+
+    SDL_Color middleGlow =
+    {
+        180,
+        200,
+        245,
+        static_cast<Uint8>(
+            35.0f * fade
+        )
+    };
+
+
+    SDL_Color innerGlow =
+    {
+        205,
+        215,
+        250,
+        static_cast<Uint8>(
+            45.0f * fade
+        )
+    };
+
+
+    DrawFilledCircle(
+        renderer,
+        moonX,
+        moonY,
+        70.0f,
+        outerGlow
+    );
+
+
+    DrawFilledCircle(
+        renderer,
+        moonX,
+        moonY,
+        55.0f,
+        middleGlow
+    );
+
+
+    DrawFilledCircle(
+        renderer,
+        moonX,
+        moonY,
+        43.0f,
+        innerGlow
+    );
+}
+
+void Environment::RenderFireflies(
+    SDL_Renderer* renderer
+) const
+{
+    // Only start appearing near the final night section.
+
+    if (playerX < 235.0f)
+    {
+        return;
+    }
+
+
+    float fade =
+        Clamp01(
+            (playerX - 235.0f) /
+            35.0f
+        );
+
+
+    SDL_Color glowColor =
+    {
+        220,
+        245,
+        120,
+        static_cast<Uint8>(
+            210.0f * fade
+        )
+    };
+
+
+    const SDL_FPoint fireflyPositions[] =
+    {
+        { 120.0f, 420.0f },
+        { 230.0f, 500.0f },
+        { 360.0f, 390.0f },
+        { 510.0f, 470.0f },
+        { 680.0f, 410.0f },
+        { 810.0f, 510.0f },
+        { 960.0f, 430.0f },
+        { 1110.0f, 490.0f },
+        { 1210.0f, 400.0f }
+    };
+
+
+    const int fireflyCount =
+        sizeof(fireflyPositions) /
+        sizeof(fireflyPositions[0]);
+
+
+    for (int i = 0;
+        i < fireflyCount;
+        ++i)
+    {
+        float bob =
+            std::sin(
+                animationTime * 2.0f +
+                static_cast<float>(i)
+            ) *
+            8.0f;
+
+
+        float drift =
+            std::sin(
+                animationTime * 1.3f +
+                static_cast<float>(i) * 2.0f
+            ) *
+            5.0f;
+
+
+        float x =
+            fireflyPositions[i].x +
+            drift;
+
+        float y =
+            fireflyPositions[i].y +
+            bob;
+
+
+        // Small transparent glow.
+
+        SDL_Color outerGlow =
+        {
+            glowColor.r,
+            glowColor.g,
+            glowColor.b,
+            static_cast<Uint8>(
+                45.0f * fade
+            )
+        };
+
+
+        DrawFilledCircle(
+            renderer,
+            x,
+            y,
+            6.0f,
+            outerGlow
+        );
+
+
+        // Bright centre.
+
+        DrawFilledCircle(
+            renderer,
+            x,
+            y,
+            2.0f,
+            glowColor
+        );
+    }
 }

@@ -284,6 +284,8 @@ void DrawFinishLine(
             );
         }
     }
+
+    
 }
 
 void DrawText(
@@ -1598,9 +1600,9 @@ void Render(
         );
     }
 
-// =====================================================
-// FLAT GROUND GRASS TUFTS
-// =====================================================
+        // =====================================================
+        // FLAT GROUND GRASS TUFTS
+        // =====================================================
 
     environment.SetTerrainDrawColor(
         renderer,
@@ -2840,7 +2842,8 @@ int main(int argc, char* argv[])
             );
 
         environment.Update(
-            chassisPosition.x
+            chassisPosition.x,
+            deltaTime
         );
 
         if (!levelComplete &&

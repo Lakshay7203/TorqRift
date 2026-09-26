@@ -8,7 +8,10 @@ public:
 
     Environment();
 
-    void Update(float playerX);
+    void Update(
+        float playerX,
+        float deltaTime
+    );
 
     void Render(
         SDL_Renderer* renderer,
@@ -41,6 +44,16 @@ private:
 
         SDL_FColor terrainTint;
     };
+
+    float animationTime = 0.0f;
+
+    void RenderFireflies(
+        SDL_Renderer* renderer
+    ) const;
+
+    void RenderMoonGlow(
+        SDL_Renderer* renderer
+    ) const;
 
     void RenderClouds(
         SDL_Renderer* renderer,
