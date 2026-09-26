@@ -363,6 +363,8 @@ void DrawUI(
     float airTime,
     const char* stuntText,
     float stuntTextTimer,
+    const char* landingText,
+    float landingTextTimer,
     int score,
     float bestTime,
     bool newBestTime,
@@ -928,6 +930,28 @@ void DrawUI(
             white
         );
     }
+
+    if (landingTextTimer > 0.0f)
+    {
+        SDL_Color landingColor =
+        {
+            255,
+            225,
+            120,
+            255
+        };
+
+
+        DrawText(
+            renderer,
+            font,
+            landingText,
+            SCREEN_WIDTH / 2.0f - 115.0f,
+            165.0f,
+            landingColor
+        );
+    }
+
 }
 
 void DrawCheckpoint(
@@ -1209,6 +1233,8 @@ void Render(
     float airTime,
     const char* stuntText,
     float stuntTextTimer,
+    const char* landingText,
+    float landingTextTimer,
     int score,
     float bestTime,
     bool newBestTime,
@@ -2037,6 +2063,8 @@ void Render(
         airTime,
         stuntText,
         stuntTextTimer,
+        landingText,
+        landingTextTimer,
         score,
         bestTime,
         newBestTime,
@@ -2277,6 +2305,10 @@ int main(int argc, char* argv[])
 
     char stuntText[64] = "";
     float stuntTextTimer = 0.0f;
+
+    char landingText[64] = "";
+    float landingTextTimer = 0.0f;
+
     int score = 0;
 
     int comboCount = 0;
@@ -2284,6 +2316,18 @@ int main(int argc, char* argv[])
     float comboTimer = 0.0f;
 
     constexpr float COMBO_WINDOW = 3.0f;
+
+    constexpr float PERFECT_LANDING_MIN_AIRTIME =
+        0.50f;
+
+    constexpr float PERFECT_LANDING_MAX_ANGLE =
+        0.40f;
+
+    constexpr float PERFECT_LANDING_MAX_ANGULAR_SPEED =
+        2.0f;
+
+    constexpr int PERFECT_LANDING_BASE_SCORE =
+        250;
 
     int checkpointScore = 0;
 
@@ -2335,6 +2379,22 @@ int main(int argc, char* argv[])
                 stuntTextTimer = 0.0f;
             }
         }
+
+        // ---------------------------------------------
+        // LANDING POPUP TIMER
+        // ---------------------------------------------
+
+        if (landingTextTimer > 0.0f)
+        {
+            landingTextTimer -=
+                deltaTime;
+
+            if (landingTextTimer < 0.0f)
+            {
+                landingTextTimer = 0.0f;
+            }
+        }
+
 
         // ---------------------------------------------
         // COMBO TIMER
@@ -2414,6 +2474,9 @@ int main(int argc, char* argv[])
 
             stuntText[0] = '\0';
             stuntTextTimer = 0.0f;
+
+            landingText[0] = '\0';
+            landingTextTimer = 0.0f;
 
             particleSystem.Clear();
         }
@@ -2779,6 +2842,22 @@ int main(int argc, char* argv[])
                         accumulatedRotation
                     );
 
+                    float landingAngularSpeed =
+                        b2Body_GetAngularVelocity(
+                            bike.chassisBodyId
+                        );
+
+
+                    bool perfectLanding =
+                        airTime >= PERFECT_LANDING_MIN_AIRTIME &&
+
+                        std::abs(currentBikeAngle) <=
+                        PERFECT_LANDING_MAX_ANGLE &&
+
+                        std::abs(landingAngularSpeed) <=
+                        PERFECT_LANDING_MAX_ANGULAR_SPEED;
+
+
                     if (positiveFlipCompleted)
                     {
                         comboCount++;
@@ -2903,6 +2982,80 @@ int main(int argc, char* argv[])
 
                         stuntTextTimer =
                             1.2f;
+                    }
+
+                    if (perfectLanding)
+                    {
+                        // If the player currently has no combo,
+                        // a clean landing starts one.
+                        if (comboCount == 0)
+                        {
+                            comboCount = 1;
+                        }
+
+
+                        // Keep the current combo alive.
+                        comboTimer =
+                            COMBO_WINDOW;
+
+
+                        const int landingBonus =
+                            PERFECT_LANDING_BASE_SCORE *
+                            comboCount;
+
+
+                        score +=
+                            landingBonus;
+
+
+                        // Small boost reward for landing cleanly.
+                        boostMeter +=
+                            10.0f;
+
+
+                        if (boostMeter > MAX_BOOST)
+                        {
+                            boostMeter =
+                                MAX_BOOST;
+                        }
+
+
+                        SDL_Log(
+                            "PERFECT LANDING | BONUS: %d | COMBO: %d",
+                            landingBonus,
+                            comboCount
+                        );
+
+
+                        // If there was no flip on this landing,
+                        // show Perfect Landing as the main stunt text.
+                        if (!positiveFlipCompleted &&
+                            !negativeFlipCompleted)
+                        {
+                            if (comboCount > 1)
+                            {
+                                SDL_snprintf(
+                                    landingText,
+                                    sizeof(landingText),
+                                    "PERFECT LANDING! +%d   COMBO x%d",
+                                    landingBonus,
+                                    comboCount
+                                );
+                            }
+                            else
+                            {
+                                SDL_snprintf(
+                                    landingText,
+                                    sizeof(landingText),
+                                    "PERFECT LANDING! +%d",
+                                    landingBonus
+                                );
+                            }
+
+
+                            landingTextTimer =
+                                1.2f;
+                        }
                     }
 
                     // Reset jump data.
@@ -3112,6 +3265,8 @@ int main(int argc, char* argv[])
             airTime,
             stuntText,
             stuntTextTimer,
+            landingText,
+            landingTextTimer,
             score,
             bestTime,
             newBestTime,
