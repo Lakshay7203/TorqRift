@@ -33,6 +33,8 @@ constexpr float GROUND_HEIGHT = 2.0f;
 constexpr float FINISH_X = 315.0f;
 constexpr float CHECKPOINT_X = 155.0f;
 
+constexpr float COMBO_WINDOW = 3.0f;
+
 
 
 
@@ -365,6 +367,8 @@ void DrawUI(
     float stuntTextTimer,
     const char* landingText,
     float landingTextTimer,
+    int comboCount,
+    float comboTimer,
     int score,
     float bestTime,
     bool newBestTime,
@@ -914,6 +918,127 @@ void DrawUI(
         );
     }
 
+    // =====================================================
+    // COMBO HUD
+    // =====================================================
+
+    if (!levelComplete &&
+        comboCount > 0 &&
+        comboTimer > 0.0f)
+    {
+        char comboText[64];
+
+
+        SDL_snprintf(
+            comboText,
+            sizeof(comboText),
+            "COMBO x%d",
+            comboCount
+        );
+
+
+        SDL_Color comboColor =
+        {
+            255,
+            220,
+            90,
+            255
+        };
+
+
+        DrawText(
+            renderer,
+            font,
+            comboText,
+            SCREEN_WIDTH / 2.0f - 65.0f,
+            215.0f,
+            comboColor
+        );
+
+        float comboPercent =
+            comboTimer /
+            COMBO_WINDOW;
+
+
+        if (comboPercent < 0.0f)
+        {
+            comboPercent = 0.0f;
+        }
+
+
+        if (comboPercent > 1.0f)
+        {
+            comboPercent = 1.0f;
+        }
+
+        const float comboBarWidth =
+            160.0f;
+
+        const float comboBarHeight =
+            8.0f;
+
+
+        SDL_FRect comboBarBackground =
+        {
+            SCREEN_WIDTH / 2.0f -
+                comboBarWidth / 2.0f,
+
+            250.0f,
+
+            comboBarWidth,
+
+            comboBarHeight
+        };
+
+
+        SDL_SetRenderDrawBlendMode(
+            renderer,
+            SDL_BLENDMODE_BLEND
+        );
+
+
+        SDL_SetRenderDrawColor(
+            renderer,
+            25,
+            25,
+            25,
+            180
+        );
+
+
+        SDL_RenderFillRect(
+            renderer,
+            &comboBarBackground
+        );
+
+        SDL_FRect comboBarFill =
+        {
+            comboBarBackground.x,
+
+            comboBarBackground.y,
+
+            comboBarWidth *
+                comboPercent,
+
+            comboBarHeight
+        };
+
+
+        SDL_SetRenderDrawColor(
+            renderer,
+            comboColor.r,
+            comboColor.g,
+            comboColor.b,
+            comboColor.a
+        );
+
+
+        SDL_RenderFillRect(
+            renderer,
+            &comboBarFill
+        );
+    }
+
 
     // =====================================================
     // STUNT POPUP
@@ -1235,6 +1360,8 @@ void Render(
     float stuntTextTimer,
     const char* landingText,
     float landingTextTimer,
+    int comboCount,
+    float comboTimer,
     int score,
     float bestTime,
     bool newBestTime,
@@ -2065,6 +2192,8 @@ void Render(
         stuntTextTimer,
         landingText,
         landingTextTimer,
+        comboCount,
+        comboTimer,
         score,
         bestTime,
         newBestTime,
@@ -2315,7 +2444,6 @@ int main(int argc, char* argv[])
 
     float comboTimer = 0.0f;
 
-    constexpr float COMBO_WINDOW = 3.0f;
 
     constexpr float PERFECT_LANDING_MIN_AIRTIME =
         0.50f;
@@ -3267,6 +3395,8 @@ int main(int argc, char* argv[])
             stuntTextTimer,
             landingText,
             landingTextTimer,
+            comboCount,
+            comboTimer,
             score,
             bestTime,
             newBestTime,
