@@ -2278,6 +2278,13 @@ int main(int argc, char* argv[])
     char stuntText[64] = "";
     float stuntTextTimer = 0.0f;
     int score = 0;
+
+    int comboCount = 0;
+
+    float comboTimer = 0.0f;
+
+    constexpr float COMBO_WINDOW = 3.0f;
+
     int checkpointScore = 0;
 
     b2Vec2 respawnPosition =
@@ -2326,6 +2333,23 @@ int main(int argc, char* argv[])
             if (stuntTextTimer < 0.0f)
             {
                 stuntTextTimer = 0.0f;
+            }
+        }
+
+        // ---------------------------------------------
+        // COMBO TIMER
+        // ---------------------------------------------
+
+        if (comboTimer > 0.0f)
+        {
+            comboTimer -=
+                deltaTime;
+
+            if (comboTimer <= 0.0f)
+            {
+                comboTimer = 0.0f;
+
+                comboCount = 0;
             }
         }
 
@@ -2531,7 +2555,23 @@ int main(int argc, char* argv[])
                 if (wheelieTime >= WHEELIE_SCORE_TIME &&
                     !wheelieAwarded)
                 {
-                    score += 250;
+                    comboCount++;
+
+                    comboTimer =
+                        COMBO_WINDOW;
+
+
+                    const int baseWheelieScore =
+                        250;
+
+
+                    const int stuntScore =
+                        baseWheelieScore *
+                        comboCount;
+
+
+                    score +=
+                        stuntScore;
 
                     // Wheelie contributes 25% of the boost meter.
                     boostMeter += 25.0f;
@@ -2552,21 +2592,25 @@ int main(int argc, char* argv[])
                         rearWheelPosition
                     );
 
-                    SDL_snprintf(
-                        stuntText,
-                        sizeof(stuntText),
-                        "WHEELIE! +250"
-                    );
-
-                    stuntTextTimer =
-                        1.2f;
-
-
-                    SDL_Log(
-                        "WHEELIE | Time: %.2f | Score: %d",
-                        wheelieTime,
-                        score
-                    );
+                    if (comboCount > 1)
+                    {
+                        SDL_snprintf(
+                            stuntText,
+                            sizeof(stuntText),
+                            "WHEELIE! +%d   COMBO x%d",
+                            stuntScore,
+                            comboCount
+                        );
+                    }
+                    else
+                    {
+                        SDL_snprintf(
+                            stuntText,
+                            sizeof(stuntText),
+                            "WHEELIE! +%d",
+                            stuntScore
+                        );
+                    }
                 }
             }
             else
@@ -2715,8 +2759,7 @@ int main(int argc, char* argv[])
                 airTime += physicsTimeStep;
             }
 
-            if (!wasBikeGrounded && bikeGrounded)
-            {
+            
                 // =========================
                 // AIR TIME LANDING
                 // =========================
@@ -2738,62 +2781,134 @@ int main(int argc, char* argv[])
 
                     if (positiveFlipCompleted)
                     {
-                        score += 500;
+                        comboCount++;
 
-                        boostMeter += 50.0f;
+                        comboTimer =
+                            COMBO_WINDOW;
+
+
+                        const int baseFlipScore =
+                            500;
+
+
+                        const int stuntScore =
+                            baseFlipScore *
+                            comboCount;
+
+
+                        score +=
+                            stuntScore;
+
+
+                        boostMeter +=
+                            50.0f;
+
 
                         if (boostMeter > MAX_BOOST)
                         {
-                            boostMeter = MAX_BOOST;
+                            boostMeter =
+                                MAX_BOOST;
                         }
+
 
                         SDL_Log(
                             "FRONT FLIP DETECTED | SCORE: %d",
                             score
                         );
 
-                        SDL_snprintf(
-                            stuntText,
-                            sizeof(stuntText),
-                            "FRONT FLIP! +500"
-                        );
 
-                        stuntTextTimer = 1.2f;
+                        if (comboCount > 1)
+                        {
+                            SDL_snprintf(
+                                stuntText,
+                                sizeof(stuntText),
+                                "FRONT FLIP! +%d   COMBO x%d",
+                                stuntScore,
+                                comboCount
+                            );
+                        }
+                        else
+                        {
+                            SDL_snprintf(
+                                stuntText,
+                                sizeof(stuntText),
+                                "FRONT FLIP! +%d",
+                                stuntScore
+                            );
+                        }
+
+
+                        stuntTextTimer =
+                            1.2f;
                     }
 
                     if (negativeFlipCompleted)
                     {
-                        score += 500;
+                        comboCount++;
 
-                        boostMeter += 50.0f;
+                        comboTimer =
+                            COMBO_WINDOW;
+
+
+                        const int baseFlipScore =
+                            500;
+
+
+                        const int stuntScore =
+                            baseFlipScore *
+                            comboCount;
+
+
+                        score +=
+                            stuntScore;
+
+
+                        boostMeter +=
+                            50.0f;
+
 
                         if (boostMeter > MAX_BOOST)
                         {
-                            boostMeter = MAX_BOOST;
+                            boostMeter =
+                                MAX_BOOST;
                         }
+
 
                         SDL_Log(
                             "BACKFLIP DETECTED | SCORE: %d",
                             score
                         );
 
-                        SDL_snprintf(
-                            stuntText,
-                            sizeof(stuntText),
-                            "BACKFLIP! +500"
-                        );
 
-                        stuntTextTimer = 1.2f;
+                        if (comboCount > 1)
+                        {
+                            SDL_snprintf(
+                                stuntText,
+                                sizeof(stuntText),
+                                "BACKFLIP! +%d   COMBO x%d",
+                                stuntScore,
+                                comboCount
+                            );
+                        }
+                        else
+                        {
+                            SDL_snprintf(
+                                stuntText,
+                                sizeof(stuntText),
+                                "BACKFLIP! +%d",
+                                stuntScore
+                            );
+                        }
+
+
+                        stuntTextTimer =
+                            1.2f;
                     }
 
+                    // Reset jump data.
                     airTime = 0.0f;
                     accumulatedRotation = 0.0f;
                 }
-
-                // Reset jump data.
-                airTime = 0.0f;
-                accumulatedRotation = 0.0f;
-            }
 
             wasBikeGrounded = bikeGrounded;
 
