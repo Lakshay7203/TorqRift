@@ -15,6 +15,13 @@ public:
         float cameraX
     ) const;
 
+    void SetTerrainDrawColor(
+        SDL_Renderer* renderer,
+        Uint8 red,
+        Uint8 green,
+        Uint8 blue
+    ) const;
+
 
 private:
 
@@ -31,6 +38,8 @@ private:
         SDL_FColor nearMountainColor;
 
         SDL_FColor foregroundColor;
+
+        SDL_FColor terrainTint;
     };
 
     void RenderClouds(
@@ -134,5 +143,6 @@ private:
         float scale,
         SDL_FColor color
     ) const;
+
 
 };

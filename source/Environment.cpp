@@ -60,6 +60,14 @@ Environment::Environment()
         1.0f
     };
 
+    dayTheme.terrainTint =
+    {
+        1.0f,
+        1.0f,
+        1.0f,
+        1.0f
+    };
+
 
     // =====================================================
     // SUNSET
@@ -114,6 +122,13 @@ Environment::Environment()
         1.0f
     };
 
+    sunsetTheme.terrainTint =
+    {
+        0.95f,
+        0.72f,
+        0.60f,
+        1.0f
+    };
 
     // =====================================================
     // NIGHT
@@ -165,6 +180,14 @@ Environment::Environment()
         0.05f,
         0.08f,
         0.12f,
+        1.0f
+    };
+
+    nightTheme.terrainTint =
+    {
+        0.45f,
+        0.55f,
+        0.75f,
         1.0f
     };
 }
@@ -653,6 +676,13 @@ Environment::GetCurrentTheme() const
                 sunsetTheme.foregroundColor,
                 blend
             );
+
+        currentTheme.terrainTint =
+            LerpColor(
+                dayTheme.terrainTint,
+                sunsetTheme.terrainTint,
+                blend
+            );
     }
 
 
@@ -722,6 +752,13 @@ Environment::GetCurrentTheme() const
             LerpColor(
                 sunsetTheme.foregroundColor,
                 nightTheme.foregroundColor,
+                blend
+            );
+
+        currentTheme.terrainTint =
+            LerpColor(
+                sunsetTheme.terrainTint,
+                nightTheme.terrainTint,
                 blend
             );
     }
@@ -1495,6 +1532,47 @@ void Environment::RenderClouds(
         180.0f,
         0.50f,
         theme.cloudColor
+    );
+}
+
+void Environment::SetTerrainDrawColor(
+    SDL_Renderer* renderer,
+    Uint8 red,
+    Uint8 green,
+    Uint8 blue
+) const
+{
+    EnvironmentTheme currentTheme =
+        GetCurrentTheme();
+
+
+    Uint8 tintedRed =
+        static_cast<Uint8>(
+            red *
+            currentTheme.terrainTint.r
+            );
+
+
+    Uint8 tintedGreen =
+        static_cast<Uint8>(
+            green *
+            currentTheme.terrainTint.g
+            );
+
+
+    Uint8 tintedBlue =
+        static_cast<Uint8>(
+            blue *
+            currentTheme.terrainTint.b
+            );
+
+
+    SDL_SetRenderDrawColor(
+        renderer,
+        tintedRed,
+        tintedGreen,
+        tintedBlue,
+        255
     );
 }
 

@@ -1229,12 +1229,11 @@ void Render(
     // BASE DIRT GROUND
     // =====================================================
 
-    SDL_SetRenderDrawColor(
+    environment.SetTerrainDrawColor(
         renderer,
         120,
         75,
-        35,
-        255
+        35
     );
 
     SDL_FRect visualGround =
@@ -1259,12 +1258,11 @@ void Render(
         25.0f
     };
 
-    SDL_SetRenderDrawColor(
+    environment.SetTerrainDrawColor(
         renderer,
         145,
         92,
-        45,
-        255
+        45
     );
 
     SDL_RenderFillRect(
@@ -1282,12 +1280,11 @@ void Render(
         25.0f
     };
 
-    SDL_SetRenderDrawColor(
+    environment.SetTerrainDrawColor(
         renderer,
         120,
         72,
-        35,
-        255
+        35
     );
 
     SDL_RenderFillRect(
@@ -1333,12 +1330,11 @@ void Render(
         // FILL DIRT UNDER THE HILL
         // -------------------------------------------------
 
-        SDL_SetRenderDrawColor(
+        environment.SetTerrainDrawColor(
             renderer,
             120,
             75,
-            35,
-            255
+            35
         );
 
 
@@ -1379,19 +1375,18 @@ void Render(
                     groundRect.y;
 
 
-// =====================================================
-// CONTINUOUS HILL DIRT
-// =====================================================
+                // =====================================================
+                // CONTINUOUS HILL DIRT
+                // =====================================================
 
-// Deep earth.
-// This goes from the hill surface all the way down,
-// so the hill visually becomes part of the ground.
-                SDL_SetRenderDrawColor(
+                // Deep earth.
+                // This goes from the hill surface all the way down,
+                // so the hill visually becomes part of the ground.
+                environment.SetTerrainDrawColor(
                     renderer,
                     95,
                     55,
-                    30,
-                    255
+                    30
                 );
 
                 SDL_RenderLine(
@@ -1409,12 +1404,11 @@ void Render(
                         groundRect.y
                     );
 
-                SDL_SetRenderDrawColor(
+                environment.SetTerrainDrawColor(
                     renderer,
                     125,
                     75,
-                    38,
-                    255
+                    38
                 );
 
                 SDL_RenderLine(
@@ -1432,12 +1426,11 @@ void Render(
                         groundRect.y
                     );
 
-                SDL_SetRenderDrawColor(
+                environment.SetTerrainDrawColor(
                     renderer,
                     155,
                     100,
-                    50,
-                    255
+                    50
                 );
 
                 SDL_RenderLine(
@@ -1457,12 +1450,11 @@ void Render(
         // -------------------------------------------------
 
         // Dark grass shadow.
-        SDL_SetRenderDrawColor(
+        environment.SetTerrainDrawColor(
             renderer,
             35,
             110,
-            45,
-            255
+            45
         );
 
         SDL_RenderLine(
@@ -1475,12 +1467,11 @@ void Render(
 
 
         // Bright grass surface.
-        SDL_SetRenderDrawColor(
+        environment.SetTerrainDrawColor(
             renderer,
             70,
             180,
-            75,
-            255
+            75
         );
 
         for (int thickness = -1;
@@ -1520,12 +1511,11 @@ void Render(
             float normalY =
                 -terrainDX / terrainLength;
 
-            SDL_SetRenderDrawColor(
+            environment.SetTerrainDrawColor(
                 renderer,
                 45,
                 135,
-                50,
-                255
+                50
             );
 
             // Add several small grass clumps.
@@ -1588,12 +1578,11 @@ void Render(
     // FLAT GROUND GRASS
     // =====================================================
 
-    SDL_SetRenderDrawColor(
+    environment.SetTerrainDrawColor(
         renderer,
         60,
         160,
-        70,
-        255
+        70
     );
 
     for (int thickness = 0;
@@ -1613,12 +1602,11 @@ void Render(
 // FLAT GROUND GRASS TUFTS
 // =====================================================
 
-    SDL_SetRenderDrawColor(
+    environment.SetTerrainDrawColor(
         renderer,
         45,
         135,
-        50,
-        255
+        50
     );
 
     int grassIndex = 0;
