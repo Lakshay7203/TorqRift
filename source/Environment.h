@@ -27,7 +27,6 @@ private:
         SDL_FColor nearMountainColor;
     };
 
-
     float playerX = 0.0f;
 
 
@@ -54,4 +53,24 @@ private:
 
 
     EnvironmentTheme GetCurrentTheme() const;
+
+    void RenderSun(
+        SDL_Renderer* renderer
+    ) const;
+
+    void RenderMoon(
+        SDL_Renderer* renderer
+    ) const;
+
+    void RenderStars(
+        SDL_Renderer* renderer
+    ) const;
+
+    void DrawFilledCircle(
+        SDL_Renderer* renderer,
+        float centerX,
+        float centerY,
+        float radius,
+        SDL_Color color
+    ) const;
 };

@@ -217,6 +217,300 @@ SDL_FColor Environment::LerpColor(
     return result;
 }
 
+void Environment::DrawFilledCircle(
+    SDL_Renderer* renderer,
+    float centerX,
+    float centerY,
+    float radius,
+    SDL_Color color
+) const
+{
+    SDL_SetRenderDrawColor(
+        renderer,
+        color.r,
+        color.g,
+        color.b,
+        color.a
+    );
+
+    for (float y = -radius;
+        y <= radius;
+        y += 1.0f)
+    {
+        for (float x = -radius;
+            x <= radius;
+            x += 1.0f)
+        {
+            if (x * x + y * y <=
+                radius * radius)
+            {
+                SDL_RenderPoint(
+                    renderer,
+                    centerX + x,
+                    centerY + y
+                );
+            }
+        }
+    }
+}
+
+void Environment::RenderSun(
+    SDL_Renderer* renderer
+) const
+{
+    // Sun disappears once night approaches.
+    if (playerX >= 230.0f)
+    {
+        return;
+    }
+
+
+    SDL_Color daySun =
+    {
+        255,
+        235,
+        135,
+        255
+    };
+
+
+    SDL_Color sunsetSun =
+    {
+        255,
+        105,
+        55,
+        255
+    };
+
+
+    float transition =
+        Clamp01(
+            (playerX - 70.0f) /
+            130.0f
+        );
+
+
+    SDL_Color sunColor =
+        LerpColor(
+            daySun,
+            sunsetSun,
+            transition
+        );
+
+
+    // Start high in the sky.
+    float sunX =
+        850.0f;
+
+    float sunY =
+        110.0f;
+
+
+    // During the level the sun slowly moves
+    // toward the horizon.
+    sunX -=
+        140.0f *
+        transition;
+
+    sunY +=
+        210.0f *
+        transition;
+
+
+    // Fade sun out as night approaches.
+    if (playerX > 190.0f)
+    {
+        float fade =
+            Clamp01(
+                (230.0f - playerX) /
+                40.0f
+            );
+
+        sunColor.a =
+            static_cast<Uint8>(
+                255.0f *
+                fade
+                );
+    }
+
+
+    DrawFilledCircle(
+        renderer,
+        sunX,
+        sunY,
+        38.0f,
+        sunColor
+    );
+}
+
+void Environment::RenderMoon(
+    SDL_Renderer* renderer
+) const
+{
+    if (playerX < 200.0f)
+    {
+        return;
+    }
+
+
+    float moonFade =
+        Clamp01(
+            (playerX - 200.0f) /
+            70.0f
+        );
+
+
+    SDL_Color moonColor =
+    {
+        225,
+        230,
+        245,
+        static_cast<Uint8>(
+            255.0f *
+            moonFade
+        )
+    };
+
+
+    DrawFilledCircle(
+        renderer,
+        850.0f,
+        120.0f,
+        32.0f,
+        moonColor
+    );
+
+    SDL_Color craterColor =
+    {
+        185,
+        195,
+        215,
+        static_cast<Uint8>(
+            170.0f *
+            moonFade
+        )
+    };
+
+
+    DrawFilledCircle(
+        renderer,
+        840.0f,
+        112.0f,
+        6.0f,
+        craterColor
+    );
+
+    DrawFilledCircle(
+        renderer,
+        860.0f,
+        128.0f,
+        5.0f,
+        craterColor
+    );
+
+    DrawFilledCircle(
+        renderer,
+        848.0f,
+        137.0f,
+        3.0f,
+        craterColor
+    );
+}
+
+void Environment::RenderStars(
+    SDL_Renderer* renderer
+) const
+{
+    if (playerX < 190.0f)
+    {
+        return;
+    }
+
+
+    float starFade =
+        Clamp01(
+            (playerX - 190.0f) /
+            80.0f
+        );
+
+
+    SDL_Color starColor =
+    {
+        245,
+        245,
+        225,
+        static_cast<Uint8>(
+            255.0f *
+            starFade
+        )
+    };
+
+
+    SDL_SetRenderDrawColor(
+        renderer,
+        starColor.r,
+        starColor.g,
+        starColor.b,
+        starColor.a
+    );
+
+
+    const SDL_FPoint stars[] =
+    {
+        { 80.0f,  80.0f },
+        { 150.0f, 145.0f },
+        { 230.0f, 75.0f },
+        { 310.0f, 180.0f },
+        { 390.0f, 110.0f },
+        { 475.0f, 60.0f },
+        { 550.0f, 155.0f },
+        { 630.0f, 95.0f },
+        { 710.0f, 190.0f },
+        { 790.0f, 70.0f },
+        { 870.0f, 145.0f },
+        { 950.0f, 60.0f },
+        { 1130.0f, 180.0f },
+        { 1190.0f, 90.0f },
+        { 1230.0f, 230.0f },
+
+        { 120.0f, 260.0f },
+        { 260.0f, 235.0f },
+        { 430.0f, 250.0f },
+        { 610.0f, 270.0f },
+        { 820.0f, 245.0f }
+    };
+
+
+    const int starCount =
+        sizeof(stars) /
+        sizeof(stars[0]);
+
+
+    for (int i = 0;
+        i < starCount;
+        ++i)
+    {
+        float size =
+            (i % 4 == 0)
+            ? 3.0f
+            : 2.0f;
+
+
+        SDL_FRect starRect =
+        {
+            stars[i].x,
+            stars[i].y,
+            size,
+            size
+        };
+
+
+        SDL_RenderFillRect(
+            renderer,
+            &starRect
+        );
+    }
+}
 
 // ---------------------------------------------------------
 // GET CURRENT THEME
@@ -264,6 +558,7 @@ Environment::GetCurrentTheme() const
                 blend
             );
     }
+
 
 
     // =====================================================
@@ -359,6 +654,27 @@ void Environment::Render(
         renderer
     );
 
+    SDL_SetRenderDrawBlendMode(
+        renderer,
+        SDL_BLENDMODE_BLEND
+    );
+
+
+    // =====================================================
+    // SKY OBJECTS
+    // =====================================================
+
+    RenderStars(
+        renderer
+    );
+
+    RenderSun(
+        renderer
+    );
+
+    RenderMoon(
+        renderer
+    );
 
     // =====================================================
     // FAR MOUNTAINS
