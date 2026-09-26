@@ -22,10 +22,36 @@ private:
     {
         SDL_Color skyColor;
 
+        SDL_Color cloudColor;
+
+        SDL_FColor farHillColor;
+
         SDL_FColor farMountainColor;
 
         SDL_FColor nearMountainColor;
     };
+
+    void RenderClouds(
+        SDL_Renderer* renderer,
+        float cameraX,
+        const EnvironmentTheme& theme
+    ) const;
+
+
+    void DrawCloud(
+        SDL_Renderer* renderer,
+        float x,
+        float y,
+        float scale,
+        SDL_Color color
+    ) const;
+
+
+    void RenderFarHills(
+        SDL_Renderer* renderer,
+        float cameraX,
+        const EnvironmentTheme& theme
+    ) const;
 
     float playerX = 0.0f;
 

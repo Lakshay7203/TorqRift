@@ -19,6 +19,23 @@ Environment::Environment()
         255
     };
 
+    dayTheme.cloudColor =
+    {
+        235,
+        240,
+        242,
+        190
+    };
+
+
+    dayTheme.farHillColor =
+    {
+        0.68f,
+        0.76f,
+        0.70f,
+        1.0f
+    };
+
     dayTheme.farMountainColor =
     {
         0.55f,
@@ -48,6 +65,23 @@ Environment::Environment()
         255
     };
 
+    sunsetTheme.cloudColor =
+    {
+        235,
+        165,
+        150,
+        190
+    };
+
+
+    sunsetTheme.farHillColor =
+    {
+        0.58f,
+        0.45f,
+        0.48f,
+        1.0f
+    };
+
     sunsetTheme.farMountainColor =
     {
         0.52f,
@@ -75,6 +109,23 @@ Environment::Environment()
         35,
         75,
         255
+    };
+
+    nightTheme.cloudColor =
+    {
+        80,
+        90,
+        120,
+        100
+    };
+
+
+    nightTheme.farHillColor =
+    {
+        0.14f,
+        0.18f,
+        0.27f,
+        1.0f
     };
 
     nightTheme.farMountainColor =
@@ -542,6 +593,20 @@ Environment::GetCurrentTheme() const
                 blend
             );
 
+        currentTheme.cloudColor =
+            LerpColor(
+                dayTheme.cloudColor,
+                sunsetTheme.cloudColor,
+                blend
+            );
+
+
+        currentTheme.farHillColor =
+            LerpColor(
+                dayTheme.farHillColor,
+                sunsetTheme.farHillColor,
+                blend
+            );
 
         currentTheme.farMountainColor =
             LerpColor(
@@ -592,6 +657,20 @@ Environment::GetCurrentTheme() const
                 blend
             );
 
+        currentTheme.cloudColor =
+            LerpColor(
+                sunsetTheme.cloudColor,
+                nightTheme.cloudColor,
+                blend
+            );
+
+
+        currentTheme.farHillColor =
+            LerpColor(
+                sunsetTheme.farHillColor,
+                nightTheme.farHillColor,
+                blend
+            );
 
         currentTheme.farMountainColor =
             LerpColor(
@@ -638,10 +717,6 @@ void Environment::Render(
         GetCurrentTheme();
 
 
-    // =====================================================
-    // SKY
-    // =====================================================
-
     SDL_SetRenderDrawColor(
         renderer,
         currentTheme.skyColor.r,
@@ -650,9 +725,8 @@ void Environment::Render(
         currentTheme.skyColor.a
     );
 
-    SDL_RenderClear(
-        renderer
-    );
+    SDL_RenderClear(renderer);
+
 
     SDL_SetRenderDrawBlendMode(
         renderer,
@@ -674,6 +748,28 @@ void Environment::Render(
 
     RenderMoon(
         renderer
+    );
+
+
+    // =====================================================
+    // CLOUDS
+    // =====================================================
+
+    RenderClouds(
+        renderer,
+        cameraX,
+        currentTheme
+    );
+
+
+    // =====================================================
+    // VERY FAR HILLS
+    // =====================================================
+
+    RenderFarHills(
+        renderer,
+        cameraX,
+        currentTheme
     );
 
     // =====================================================
@@ -914,5 +1010,261 @@ void Environment::Render(
         9,
         nearMountainIndices,
         9
+    );
+}
+
+void Environment::DrawCloud(
+    SDL_Renderer* renderer,
+    float x,
+    float y,
+    float scale,
+    SDL_Color color
+) const
+{
+    // Left puff
+    DrawFilledCircle(
+        renderer,
+        x,
+        y,
+        20.0f * scale,
+        color
+    );
+
+
+    // Middle / largest puff
+    DrawFilledCircle(
+        renderer,
+        x + 28.0f * scale,
+        y - 10.0f * scale,
+        28.0f * scale,
+        color
+    );
+
+
+    // Right puff
+    DrawFilledCircle(
+        renderer,
+        x + 58.0f * scale,
+        y,
+        22.0f * scale,
+        color
+    );
+
+
+    // Cloud base
+    SDL_SetRenderDrawColor(
+        renderer,
+        color.r,
+        color.g,
+        color.b,
+        color.a
+    );
+
+
+    SDL_FRect cloudBase =
+    {
+        x - 18.0f * scale,
+        y,
+        98.0f * scale,
+        22.0f * scale
+    };
+
+
+    SDL_RenderFillRect(
+        renderer,
+        &cloudBase
+    );
+}
+
+void Environment::RenderClouds(
+    SDL_Renderer* renderer,
+    float cameraX,
+    const EnvironmentTheme& theme
+) const
+{
+    const float cloudShift =
+        -cameraX * 0.35f;
+
+
+    DrawCloud(
+        renderer,
+        100.0f + cloudShift,
+        120.0f,
+        0.75f,
+        theme.cloudColor
+    );
+
+
+    DrawCloud(
+        renderer,
+        420.0f + cloudShift,
+        185.0f,
+        0.55f,
+        theme.cloudColor
+    );
+
+
+    DrawCloud(
+        renderer,
+        720.0f + cloudShift,
+        95.0f,
+        0.65f,
+        theme.cloudColor
+    );
+
+
+    DrawCloud(
+        renderer,
+        1080.0f + cloudShift,
+        180.0f,
+        0.50f,
+        theme.cloudColor
+    );
+}
+
+void Environment::RenderFarHills(
+    SDL_Renderer* renderer,
+    float cameraX,
+    const EnvironmentTheme& theme
+) const
+{
+    const float hillShift =
+        -cameraX * 0.65f;
+
+
+    SDL_Vertex hills[15]{};
+
+
+    // Hill 1
+
+    hills[0].position =
+        SDL_FPoint{
+            -250.0f + hillShift,
+            550.0f
+    };
+
+    hills[1].position =
+        SDL_FPoint{
+            -20.0f + hillShift,
+            430.0f
+    };
+
+    hills[2].position =
+        SDL_FPoint{
+            220.0f + hillShift,
+            550.0f
+    };
+
+
+    // Hill 2
+
+    hills[3].position =
+        SDL_FPoint{
+            100.0f + hillShift,
+            550.0f
+    };
+
+    hills[4].position =
+        SDL_FPoint{
+            370.0f + hillShift,
+            400.0f
+    };
+
+    hills[5].position =
+        SDL_FPoint{
+            650.0f + hillShift,
+            550.0f
+    };
+
+
+    // Hill 3
+
+    hills[6].position =
+        SDL_FPoint{
+            520.0f + hillShift,
+            550.0f
+    };
+
+    hills[7].position =
+        SDL_FPoint{
+            780.0f + hillShift,
+            440.0f
+    };
+
+    hills[8].position =
+        SDL_FPoint{
+            1040.0f + hillShift,
+            550.0f
+    };
+
+
+    // Hill 4
+
+    hills[9].position =
+        SDL_FPoint{
+            900.0f + hillShift,
+            550.0f
+    };
+
+    hills[10].position =
+        SDL_FPoint{
+            1160.0f + hillShift,
+            410.0f
+    };
+
+    hills[11].position =
+        SDL_FPoint{
+            1420.0f + hillShift,
+            550.0f
+    };
+
+
+    // Hill 5
+
+    hills[12].position =
+        SDL_FPoint{
+            1300.0f + hillShift,
+            550.0f
+    };
+
+    hills[13].position =
+        SDL_FPoint{
+            1540.0f + hillShift,
+            435.0f
+    };
+
+    hills[14].position =
+        SDL_FPoint{
+            1780.0f + hillShift,
+            550.0f
+    };
+
+
+    for (int i = 0;
+        i < 15;
+        ++i)
+    {
+        hills[i].color =
+            theme.farHillColor;
+    }
+
+
+    const int indices[15] =
+    {
+        0, 1, 2,
+        3, 4, 5,
+        6, 7, 8,
+        9, 10, 11,
+        12, 13, 14
+    };
+
+
+    SDL_RenderGeometry(
+        renderer,
+        nullptr,
+        hills,
+        15,
+        indices,
+        15
     );
 }
