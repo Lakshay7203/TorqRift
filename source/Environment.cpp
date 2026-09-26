@@ -52,6 +52,14 @@ Environment::Environment()
         1.0f
     };
 
+    dayTheme.foregroundColor =
+    {
+        0.20f,
+        0.34f,
+        0.22f,
+        1.0f
+    };
+
 
     // =====================================================
     // SUNSET
@@ -98,6 +106,14 @@ Environment::Environment()
         1.0f
     };
 
+    sunsetTheme.foregroundColor =
+    {
+        0.22f,
+        0.18f,
+        0.22f,
+        1.0f
+    };
+
 
     // =====================================================
     // NIGHT
@@ -141,6 +157,14 @@ Environment::Environment()
         0.10f,
         0.14f,
         0.22f,
+        1.0f
+    };
+
+    nightTheme.foregroundColor =
+    {
+        0.05f,
+        0.08f,
+        0.12f,
         1.0f
     };
 }
@@ -622,6 +646,13 @@ Environment::GetCurrentTheme() const
                 sunsetTheme.nearMountainColor,
                 blend
             );
+
+        currentTheme.foregroundColor =
+            LerpColor(
+                dayTheme.foregroundColor,
+                sunsetTheme.foregroundColor,
+                blend
+            );
     }
 
 
@@ -684,6 +715,13 @@ Environment::GetCurrentTheme() const
             LerpColor(
                 sunsetTheme.nearMountainColor,
                 nightTheme.nearMountainColor,
+                blend
+            );
+
+        currentTheme.foregroundColor =
+            LerpColor(
+                sunsetTheme.foregroundColor,
+                nightTheme.foregroundColor,
                 blend
             );
     }
@@ -1010,6 +1048,344 @@ void Environment::Render(
         9,
         nearMountainIndices,
         9
+    );
+
+    // =====================================================
+    // FOREGROUND SCENERY
+    // =====================================================
+
+    RenderForeground(
+        renderer,
+        cameraX,
+        currentTheme
+    );
+}
+
+void Environment::DrawTree(
+    SDL_Renderer* renderer,
+    float x,
+    float y,
+    float scale,
+    SDL_FColor color
+) const
+{
+    SDL_SetRenderDrawColorFloat(
+        renderer,
+        color.r,
+        color.g,
+        color.b,
+        color.a
+    );
+
+
+    // Trunk
+
+    SDL_FRect trunk =
+    {
+        x - 5.0f * scale,
+        y - 50.0f * scale,
+        10.0f * scale,
+        50.0f * scale
+    };
+
+    SDL_RenderFillRect(
+        renderer,
+        &trunk
+    );
+
+
+    // Tree top
+
+    SDL_Vertex treeTop[3]{};
+
+    treeTop[0].position =
+    {
+        x,
+        y - 110.0f * scale
+    };
+
+    treeTop[1].position =
+    {
+        x - 38.0f * scale,
+        y - 42.0f * scale
+    };
+
+    treeTop[2].position =
+    {
+        x + 38.0f * scale,
+        y - 42.0f * scale
+    };
+
+
+    for (int i = 0; i < 3; ++i)
+    {
+        treeTop[i].color =
+            color;
+    }
+
+
+    const int indices[3] =
+    {
+        0,
+        1,
+        2
+    };
+
+
+    SDL_RenderGeometry(
+        renderer,
+        nullptr,
+        treeTop,
+        3,
+        indices,
+        3
+    );
+}
+
+void Environment::DrawBush(
+    SDL_Renderer* renderer,
+    float x,
+    float y,
+    float scale,
+    SDL_FColor color
+) const
+{
+    SDL_Color bushColor =
+    {
+        static_cast<Uint8>(
+            color.r * 255.0f
+        ),
+
+        static_cast<Uint8>(
+            color.g * 255.0f
+        ),
+
+        static_cast<Uint8>(
+            color.b * 255.0f
+        ),
+
+        255
+    };
+
+
+    DrawFilledCircle(
+        renderer,
+        x,
+        y - 12.0f * scale,
+        18.0f * scale,
+        bushColor
+    );
+
+
+    DrawFilledCircle(
+        renderer,
+        x + 20.0f * scale,
+        y - 15.0f * scale,
+        21.0f * scale,
+        bushColor
+    );
+
+
+    DrawFilledCircle(
+        renderer,
+        x + 40.0f * scale,
+        y - 10.0f * scale,
+        17.0f * scale,
+        bushColor
+    );
+}
+
+void Environment::DrawRock(
+    SDL_Renderer* renderer,
+    float x,
+    float y,
+    float scale,
+    SDL_FColor color
+) const
+{
+    SDL_Vertex rock[3]{};
+
+
+    rock[0].position =
+    {
+        x,
+        y
+    };
+
+
+    rock[1].position =
+    {
+        x + 22.0f * scale,
+        y - 32.0f * scale
+    };
+
+
+    rock[2].position =
+    {
+        x + 52.0f * scale,
+        y
+    };
+
+
+    for (int i = 0; i < 3; ++i)
+    {
+        rock[i].color =
+            color;
+    }
+
+
+    const int indices[3] =
+    {
+        0,
+        1,
+        2
+    };
+
+
+    SDL_RenderGeometry(
+        renderer,
+        nullptr,
+        rock,
+        3,
+        indices,
+        3
+    );
+}
+
+void Environment::RenderForeground(
+    SDL_Renderer* renderer,
+    float cameraX,
+    const EnvironmentTheme& theme
+) const
+{
+    // Faster than the mountain layers,
+    // so these objects feel much closer.
+
+    const float foregroundShift =
+        -cameraX * 6.0f;
+
+
+    const float groundY =
+        590.0f;
+
+
+    // =====================================================
+    // TREES
+    // =====================================================
+
+    DrawTree(
+        renderer,
+        150.0f + foregroundShift,
+        groundY,
+        0.75f,
+        theme.foregroundColor
+    );
+
+
+    DrawTree(
+        renderer,
+        760.0f + foregroundShift,
+        groundY,
+        1.0f,
+        theme.foregroundColor
+    );
+
+
+    DrawTree(
+        renderer,
+        1450.0f + foregroundShift,
+        groundY,
+        0.85f,
+        theme.foregroundColor
+    );
+
+
+    DrawTree(
+        renderer,
+        2200.0f + foregroundShift,
+        groundY,
+        1.1f,
+        theme.foregroundColor
+    );
+
+
+    DrawTree(
+        renderer,
+        2900.0f + foregroundShift,
+        groundY,
+        0.80f,
+        theme.foregroundColor
+    );
+
+
+    // =====================================================
+    // BUSHES
+    // =====================================================
+
+    DrawBush(
+        renderer,
+        430.0f + foregroundShift,
+        groundY,
+        0.70f,
+        theme.foregroundColor
+    );
+
+
+    DrawBush(
+        renderer,
+        1180.0f + foregroundShift,
+        groundY,
+        0.90f,
+        theme.foregroundColor
+    );
+
+
+    DrawBush(
+        renderer,
+        1850.0f + foregroundShift,
+        groundY,
+        0.65f,
+        theme.foregroundColor
+    );
+
+
+    DrawBush(
+        renderer,
+        2550.0f + foregroundShift,
+        groundY,
+        0.80f,
+        theme.foregroundColor
+    );
+
+
+    // =====================================================
+    // ROCKS
+    // =====================================================
+
+    DrawRock(
+        renderer,
+        600.0f + foregroundShift,
+        groundY,
+        0.8f,
+        theme.foregroundColor
+    );
+
+
+    DrawRock(
+        renderer,
+        1680.0f + foregroundShift,
+        groundY,
+        1.0f,
+        theme.foregroundColor
+    );
+
+
+    DrawRock(
+        renderer,
+        2700.0f + foregroundShift,
+        groundY,
+        0.7f,
+        theme.foregroundColor
     );
 }
 

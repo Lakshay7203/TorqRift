@@ -29,6 +29,8 @@ private:
         SDL_FColor farMountainColor;
 
         SDL_FColor nearMountainColor;
+
+        SDL_FColor foregroundColor;
     };
 
     void RenderClouds(
@@ -99,4 +101,38 @@ private:
         float radius,
         SDL_Color color
     ) const;
+
+    void RenderForeground(
+        SDL_Renderer* renderer,
+        float cameraX,
+        const EnvironmentTheme& theme
+    ) const;
+
+
+    void DrawTree(
+        SDL_Renderer* renderer,
+        float x,
+        float y,
+        float scale,
+        SDL_FColor color
+    ) const;
+
+
+    void DrawBush(
+        SDL_Renderer* renderer,
+        float x,
+        float y,
+        float scale,
+        SDL_FColor color
+    ) const;
+
+
+    void DrawRock(
+        SDL_Renderer* renderer,
+        float x,
+        float y,
+        float scale,
+        SDL_FColor color
+    ) const;
+
 };
