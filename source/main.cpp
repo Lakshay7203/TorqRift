@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cmath>
 #include "ParticleSystem.h"
+#include "Environment.h"
 
 // ---------------------------------------------------------
 // CONSTANTS
@@ -283,6 +284,8 @@ void DrawFinishLine(
             );
         }
     }
+
+    
 }
 
 void DrawText(
@@ -1195,6 +1198,7 @@ void Render(
     b2BodyId rearWheelBodyId,
     b2BodyId frontWheelBodyId,
     float cameraX,
+    Environment& environment,
     const SDL_FRect& groundRect,
     const SDL_FPoint& rearWheelScreen,
     const SDL_FPoint& frontWheelScreen,
@@ -1213,197 +1217,25 @@ void Render(
     const ParticleSystem& particleSystem)
 
 {
+
     // =====================================================
-    // SKY
+    // ENVIRONMENT
     // =====================================================
 
-    SDL_SetRenderDrawColor(
+    environment.Render(
         renderer,
-        135,
-        206,
-        235,
-        255
+        cameraX
     );
-
-    SDL_RenderClear(renderer);
-
-
-    // =====================================================
-// DISTANT MOUNTAINS - FAR LAYER
-// =====================================================
-
-// Moves very slowly compared with the camera.
-    const float farMountainShift =
-        -cameraX * 1.5f;
-
-    SDL_Vertex farMountains[12]{};
-
-    const SDL_FColor farMountainColor =
-    {
-        0.55f,
-        0.68f,
-        0.58f,
-        1.0f
-    };
-
-
-    // Mountain 1.
-    farMountains[0].position =
-        SDL_FPoint{ -100.0f + farMountainShift, 530.0f };
-
-    farMountains[1].position =
-        SDL_FPoint{ 120.0f + farMountainShift, 350.0f };
-
-    farMountains[2].position =
-        SDL_FPoint{ 340.0f + farMountainShift, 530.0f };
-
-
-    // Mountain 2.
-    farMountains[3].position =
-        SDL_FPoint{ 220.0f + farMountainShift, 530.0f };
-
-    farMountains[4].position =
-        SDL_FPoint{ 500.0f + farMountainShift, 320.0f };
-
-    farMountains[5].position =
-        SDL_FPoint{ 780.0f + farMountainShift, 530.0f };
-
-
-    // Mountain 3.
-    farMountains[6].position =
-        SDL_FPoint{ 650.0f + farMountainShift, 530.0f };
-
-    farMountains[7].position =
-        SDL_FPoint{ 900.0f + farMountainShift, 370.0f };
-
-    farMountains[8].position =
-        SDL_FPoint{ 1150.0f + farMountainShift, 530.0f };
-
-
-    // Mountain 4.
-    farMountains[9].position =
-        SDL_FPoint{ 1050.0f + farMountainShift, 530.0f };
-
-    farMountains[10].position =
-        SDL_FPoint{ 1300.0f + farMountainShift, 340.0f };
-
-    farMountains[11].position =
-        SDL_FPoint{ 1550.0f + farMountainShift, 530.0f };
-
-
-    for (int i = 0; i < 12; ++i)
-    {
-        farMountains[i].color =
-            farMountainColor;
-    }
-
-
-    const int farMountainIndices[12] =
-    {
-        0, 1, 2,
-        3, 4, 5,
-        6, 7, 8,
-        9, 10, 11
-    };
-
-
-    SDL_RenderGeometry(
-        renderer,
-        nullptr,
-        farMountains,
-        12,
-        farMountainIndices,
-        12
-    );
-
-
-    // =====================================================
-    // DISTANT MOUNTAINS - NEAR LAYER
-    // =====================================================
-
-    // Slightly faster movement = looks closer.
-    const float nearMountainShift =
-        -cameraX * 3.0f;
-
-    SDL_Vertex nearMountains[9]{};
-
-    const SDL_FColor nearMountainColor =
-    {
-        0.38f,
-        0.55f,
-        0.40f,
-        1.0f
-    };
-
-
-    // Mountain 1.
-    nearMountains[0].position =
-        SDL_FPoint{ -150.0f + nearMountainShift, 560.0f };
-
-    nearMountains[1].position =
-        SDL_FPoint{ 100.0f + nearMountainShift, 410.0f };
-
-    nearMountains[2].position =
-        SDL_FPoint{ 350.0f + nearMountainShift, 560.0f };
-
-
-    // Mountain 2.
-    nearMountains[3].position =
-        SDL_FPoint{ 300.0f + nearMountainShift, 560.0f };
-
-    nearMountains[4].position =
-        SDL_FPoint{ 620.0f + nearMountainShift, 390.0f };
-
-    nearMountains[5].position =
-        SDL_FPoint{ 940.0f + nearMountainShift, 560.0f };
-
-
-    // Mountain 3.
-    nearMountains[6].position =
-        SDL_FPoint{ 850.0f + nearMountainShift, 560.0f };
-
-    nearMountains[7].position =
-        SDL_FPoint{ 1120.0f + nearMountainShift, 420.0f };
-
-    nearMountains[8].position =
-        SDL_FPoint{ 1390.0f + nearMountainShift, 560.0f };
-
-
-    for (int i = 0; i < 9; ++i)
-    {
-        nearMountains[i].color =
-            nearMountainColor;
-    }
-
-
-    const int nearMountainIndices[9] =
-    {
-        0, 1, 2,
-        3, 4, 5,
-        6, 7, 8
-    };
-
-
-    SDL_RenderGeometry(
-        renderer,
-        nullptr,
-        nearMountains,
-        9,
-        nearMountainIndices,
-        9
-    );
-
 
     // =====================================================
     // BASE DIRT GROUND
     // =====================================================
 
-    SDL_SetRenderDrawColor(
+    environment.SetTerrainDrawColor(
         renderer,
         120,
         75,
-        35,
-        255
+        35
     );
 
     SDL_FRect visualGround =
@@ -1428,12 +1260,11 @@ void Render(
         25.0f
     };
 
-    SDL_SetRenderDrawColor(
+    environment.SetTerrainDrawColor(
         renderer,
         145,
         92,
-        45,
-        255
+        45
     );
 
     SDL_RenderFillRect(
@@ -1451,12 +1282,11 @@ void Render(
         25.0f
     };
 
-    SDL_SetRenderDrawColor(
+    environment.SetTerrainDrawColor(
         renderer,
         120,
         72,
-        35,
-        255
+        35
     );
 
     SDL_RenderFillRect(
@@ -1502,12 +1332,11 @@ void Render(
         // FILL DIRT UNDER THE HILL
         // -------------------------------------------------
 
-        SDL_SetRenderDrawColor(
+        environment.SetTerrainDrawColor(
             renderer,
             120,
             75,
-            35,
-            255
+            35
         );
 
 
@@ -1548,19 +1377,18 @@ void Render(
                     groundRect.y;
 
 
-// =====================================================
-// CONTINUOUS HILL DIRT
-// =====================================================
+                // =====================================================
+                // CONTINUOUS HILL DIRT
+                // =====================================================
 
-// Deep earth.
-// This goes from the hill surface all the way down,
-// so the hill visually becomes part of the ground.
-                SDL_SetRenderDrawColor(
+                // Deep earth.
+                // This goes from the hill surface all the way down,
+                // so the hill visually becomes part of the ground.
+                environment.SetTerrainDrawColor(
                     renderer,
                     95,
                     55,
-                    30,
-                    255
+                    30
                 );
 
                 SDL_RenderLine(
@@ -1578,12 +1406,11 @@ void Render(
                         groundRect.y
                     );
 
-                SDL_SetRenderDrawColor(
+                environment.SetTerrainDrawColor(
                     renderer,
                     125,
                     75,
-                    38,
-                    255
+                    38
                 );
 
                 SDL_RenderLine(
@@ -1601,12 +1428,11 @@ void Render(
                         groundRect.y
                     );
 
-                SDL_SetRenderDrawColor(
+                environment.SetTerrainDrawColor(
                     renderer,
                     155,
                     100,
-                    50,
-                    255
+                    50
                 );
 
                 SDL_RenderLine(
@@ -1626,12 +1452,11 @@ void Render(
         // -------------------------------------------------
 
         // Dark grass shadow.
-        SDL_SetRenderDrawColor(
+        environment.SetTerrainDrawColor(
             renderer,
             35,
             110,
-            45,
-            255
+            45
         );
 
         SDL_RenderLine(
@@ -1644,12 +1469,11 @@ void Render(
 
 
         // Bright grass surface.
-        SDL_SetRenderDrawColor(
+        environment.SetTerrainDrawColor(
             renderer,
             70,
             180,
-            75,
-            255
+            75
         );
 
         for (int thickness = -1;
@@ -1689,12 +1513,11 @@ void Render(
             float normalY =
                 -terrainDX / terrainLength;
 
-            SDL_SetRenderDrawColor(
+            environment.SetTerrainDrawColor(
                 renderer,
                 45,
                 135,
-                50,
-                255
+                50
             );
 
             // Add several small grass clumps.
@@ -1757,12 +1580,11 @@ void Render(
     // FLAT GROUND GRASS
     // =====================================================
 
-    SDL_SetRenderDrawColor(
+    environment.SetTerrainDrawColor(
         renderer,
         60,
         160,
-        70,
-        255
+        70
     );
 
     for (int thickness = 0;
@@ -1778,16 +1600,15 @@ void Render(
         );
     }
 
-// =====================================================
-// FLAT GROUND GRASS TUFTS
-// =====================================================
+        // =====================================================
+        // FLAT GROUND GRASS TUFTS
+        // =====================================================
 
-    SDL_SetRenderDrawColor(
+    environment.SetTerrainDrawColor(
         renderer,
         45,
         135,
-        50,
-        255
+        50
     );
 
     int grassIndex = 0;
@@ -2448,6 +2269,8 @@ int main(int argc, char* argv[])
 
     ParticleSystem particleSystem;
 
+    Environment environment;
+
     // No best time exists yet so -1
     float bestTime = -1.0f;
     bool newBestTime = false;
@@ -3018,6 +2841,11 @@ int main(int argc, char* argv[])
                 bike.chassisBodyId
             );
 
+        environment.Update(
+            chassisPosition.x,
+            deltaTime
+        );
+
         if (!levelComplete &&
             chassisPosition.x >= FINISH_X)
         {
@@ -3158,6 +2986,7 @@ int main(int argc, char* argv[])
             bike.rearWheelBodyId,
             bike.frontWheelBodyId,
             cameraX,
+            environment,
             groundRect,
             rearWheelScreen,
             frontWheelScreen,
