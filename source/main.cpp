@@ -356,6 +356,26 @@ void DrawText(
     SDL_DestroySurface(textSurface);
 }
 
+SDL_Color GetComboColor(int comboCount)
+{
+    if (comboCount <= 1)
+    {
+        return { 255, 255, 255, 255 };
+    }
+
+    if (comboCount == 2)
+    {
+        return { 255, 220, 90, 255 };
+    }
+
+    if (comboCount == 3)
+    {
+        return { 255, 150, 70, 255 };
+    }
+
+    return { 255, 90, 160, 255 };
+}
+
 void DrawUI(
     SDL_Renderer* renderer,
     TTF_Font* font,
@@ -928,15 +948,6 @@ void DrawUI(
     {
         char comboText[64];
 
-
-        SDL_snprintf(
-            comboText,
-            sizeof(comboText),
-            "COMBO x%d",
-            comboCount
-        );
-
-
         SDL_Color comboColor =
         {
             255,
@@ -944,6 +955,14 @@ void DrawUI(
             90,
             255
         };
+
+        SDL_snprintf(
+            comboText,
+            sizeof(comboText),
+            "COMBO x%d",
+            comboCount,
+            comboColor
+        );
 
 
         DrawText(
@@ -959,6 +978,16 @@ void DrawUI(
             comboTimer /
             COMBO_WINDOW;
 
+        if (comboPercent < 0.30f)
+        {
+            comboColor =
+            {
+                255,
+                80,
+                80,
+                255
+            };
+        }
 
         if (comboPercent < 0.0f)
         {
@@ -1039,6 +1068,10 @@ void DrawUI(
         );
     }
 
+    SDL_Color comboColor =
+        GetComboColor(
+            comboCount
+        );
 
     // =====================================================
     // STUNT POPUP
@@ -1046,13 +1079,25 @@ void DrawUI(
 
     if (stuntTextTimer > 0.0f)
     {
+        // Shadow
+        DrawText(
+            renderer,
+            stuntFont,
+            stuntText,
+            SCREEN_WIDTH / 2.0f - 107.0f,
+            108.0f,
+            { 20, 20, 20, 200 }
+        );
+
+
+        // Main text
         DrawText(
             renderer,
             stuntFont,
             stuntText,
             SCREEN_WIDTH / 2.0f - 110.0f,
             105.0f,
-            white
+            comboColor
         );
     }
 
@@ -1060,11 +1105,20 @@ void DrawUI(
     {
         SDL_Color landingColor =
         {
-            255,
-            225,
             120,
+            255,
+            170,
             255
         };
+
+        DrawText(
+            renderer,
+            font,
+            landingText,
+            SCREEN_WIDTH / 2.0f - 112.0f,
+            168.0f,
+            { 20, 20, 20, 180 }
+        );
 
 
         DrawText(
