@@ -33,6 +33,8 @@ constexpr float GROUND_HEIGHT = 2.0f;
 constexpr float FINISH_X = 315.0f;
 constexpr float CHECKPOINT_X = 155.0f;
 
+constexpr float COMBO_WINDOW = 3.0f;
+
 
 
 
@@ -354,6 +356,26 @@ void DrawText(
     SDL_DestroySurface(textSurface);
 }
 
+SDL_Color GetComboColor(int comboCount)
+{
+    if (comboCount <= 1)
+    {
+        return { 255, 255, 255, 255 };
+    }
+
+    if (comboCount == 2)
+    {
+        return { 255, 220, 90, 255 };
+    }
+
+    if (comboCount == 3)
+    {
+        return { 255, 150, 70, 255 };
+    }
+
+    return { 255, 90, 160, 255 };
+}
+
 void DrawUI(
     SDL_Renderer* renderer,
     TTF_Font* font,
@@ -363,6 +385,10 @@ void DrawUI(
     float airTime,
     const char* stuntText,
     float stuntTextTimer,
+    const char* landingText,
+    float landingTextTimer,
+    int comboCount,
+    float comboTimer,
     int score,
     float bestTime,
     bool newBestTime,
@@ -912,6 +938,140 @@ void DrawUI(
         );
     }
 
+    // =====================================================
+    // COMBO HUD
+    // =====================================================
+
+    if (!levelComplete &&
+        comboCount > 0 &&
+        comboTimer > 0.0f)
+    {
+        char comboText[64];
+
+        SDL_Color comboColor =
+        {
+            255,
+            220,
+            90,
+            255
+        };
+
+        SDL_snprintf(
+            comboText,
+            sizeof(comboText),
+            "COMBO x%d",
+            comboCount,
+            comboColor
+        );
+
+
+        DrawText(
+            renderer,
+            font,
+            comboText,
+            SCREEN_WIDTH / 2.0f - 65.0f,
+            215.0f,
+            comboColor
+        );
+
+        float comboPercent =
+            comboTimer /
+            COMBO_WINDOW;
+
+        if (comboPercent < 0.30f)
+        {
+            comboColor =
+            {
+                255,
+                80,
+                80,
+                255
+            };
+        }
+
+        if (comboPercent < 0.0f)
+        {
+            comboPercent = 0.0f;
+        }
+
+
+        if (comboPercent > 1.0f)
+        {
+            comboPercent = 1.0f;
+        }
+
+        const float comboBarWidth =
+            160.0f;
+
+        const float comboBarHeight =
+            8.0f;
+
+
+        SDL_FRect comboBarBackground =
+        {
+            SCREEN_WIDTH / 2.0f -
+                comboBarWidth / 2.0f,
+
+            250.0f,
+
+            comboBarWidth,
+
+            comboBarHeight
+        };
+
+
+        SDL_SetRenderDrawBlendMode(
+            renderer,
+            SDL_BLENDMODE_BLEND
+        );
+
+
+        SDL_SetRenderDrawColor(
+            renderer,
+            25,
+            25,
+            25,
+            180
+        );
+
+
+        SDL_RenderFillRect(
+            renderer,
+            &comboBarBackground
+        );
+
+        SDL_FRect comboBarFill =
+        {
+            comboBarBackground.x,
+
+            comboBarBackground.y,
+
+            comboBarWidth *
+                comboPercent,
+
+            comboBarHeight
+        };
+
+
+        SDL_SetRenderDrawColor(
+            renderer,
+            comboColor.r,
+            comboColor.g,
+            comboColor.b,
+            comboColor.a
+        );
+
+
+        SDL_RenderFillRect(
+            renderer,
+            &comboBarFill
+        );
+    }
+
+    SDL_Color comboColor =
+        GetComboColor(
+            comboCount
+        );
 
     // =====================================================
     // STUNT POPUP
@@ -919,15 +1079,58 @@ void DrawUI(
 
     if (stuntTextTimer > 0.0f)
     {
+        // Shadow
+        DrawText(
+            renderer,
+            stuntFont,
+            stuntText,
+            SCREEN_WIDTH / 2.0f - 107.0f,
+            108.0f,
+            { 20, 20, 20, 200 }
+        );
+
+
+        // Main text
         DrawText(
             renderer,
             stuntFont,
             stuntText,
             SCREEN_WIDTH / 2.0f - 110.0f,
             105.0f,
-            white
+            comboColor
         );
     }
+
+    if (landingTextTimer > 0.0f)
+    {
+        SDL_Color landingColor =
+        {
+            120,
+            255,
+            170,
+            255
+        };
+
+        DrawText(
+            renderer,
+            font,
+            landingText,
+            SCREEN_WIDTH / 2.0f - 112.0f,
+            168.0f,
+            { 20, 20, 20, 180 }
+        );
+
+
+        DrawText(
+            renderer,
+            font,
+            landingText,
+            SCREEN_WIDTH / 2.0f - 115.0f,
+            165.0f,
+            landingColor
+        );
+    }
+
 }
 
 void DrawCheckpoint(
@@ -1209,6 +1412,10 @@ void Render(
     float airTime,
     const char* stuntText,
     float stuntTextTimer,
+    const char* landingText,
+    float landingTextTimer,
+    int comboCount,
+    float comboTimer,
     int score,
     float bestTime,
     bool newBestTime,
@@ -2037,6 +2244,10 @@ void Render(
         airTime,
         stuntText,
         stuntTextTimer,
+        landingText,
+        landingTextTimer,
+        comboCount,
+        comboTimer,
         score,
         bestTime,
         newBestTime,
@@ -2277,13 +2488,28 @@ int main(int argc, char* argv[])
 
     char stuntText[64] = "";
     float stuntTextTimer = 0.0f;
+
+    char landingText[64] = "";
+    float landingTextTimer = 0.0f;
+
     int score = 0;
 
     int comboCount = 0;
 
     float comboTimer = 0.0f;
 
-    constexpr float COMBO_WINDOW = 3.0f;
+
+    constexpr float PERFECT_LANDING_MIN_AIRTIME =
+        0.50f;
+
+    constexpr float PERFECT_LANDING_MAX_ANGLE =
+        0.40f;
+
+    constexpr float PERFECT_LANDING_MAX_ANGULAR_SPEED =
+        2.0f;
+
+    constexpr int PERFECT_LANDING_BASE_SCORE =
+        250;
 
     int checkpointScore = 0;
 
@@ -2335,6 +2561,22 @@ int main(int argc, char* argv[])
                 stuntTextTimer = 0.0f;
             }
         }
+
+        // ---------------------------------------------
+        // LANDING POPUP TIMER
+        // ---------------------------------------------
+
+        if (landingTextTimer > 0.0f)
+        {
+            landingTextTimer -=
+                deltaTime;
+
+            if (landingTextTimer < 0.0f)
+            {
+                landingTextTimer = 0.0f;
+            }
+        }
+
 
         // ---------------------------------------------
         // COMBO TIMER
@@ -2414,6 +2656,9 @@ int main(int argc, char* argv[])
 
             stuntText[0] = '\0';
             stuntTextTimer = 0.0f;
+
+            landingText[0] = '\0';
+            landingTextTimer = 0.0f;
 
             particleSystem.Clear();
         }
@@ -2779,6 +3024,22 @@ int main(int argc, char* argv[])
                         accumulatedRotation
                     );
 
+                    float landingAngularSpeed =
+                        b2Body_GetAngularVelocity(
+                            bike.chassisBodyId
+                        );
+
+
+                    bool perfectLanding =
+                        airTime >= PERFECT_LANDING_MIN_AIRTIME &&
+
+                        std::abs(currentBikeAngle) <=
+                        PERFECT_LANDING_MAX_ANGLE &&
+
+                        std::abs(landingAngularSpeed) <=
+                        PERFECT_LANDING_MAX_ANGULAR_SPEED;
+
+
                     if (positiveFlipCompleted)
                     {
                         comboCount++;
@@ -2903,6 +3164,80 @@ int main(int argc, char* argv[])
 
                         stuntTextTimer =
                             1.2f;
+                    }
+
+                    if (perfectLanding)
+                    {
+                        // If the player currently has no combo,
+                        // a clean landing starts one.
+                        if (comboCount == 0)
+                        {
+                            comboCount = 1;
+                        }
+
+
+                        // Keep the current combo alive.
+                        comboTimer =
+                            COMBO_WINDOW;
+
+
+                        const int landingBonus =
+                            PERFECT_LANDING_BASE_SCORE *
+                            comboCount;
+
+
+                        score +=
+                            landingBonus;
+
+
+                        // Small boost reward for landing cleanly.
+                        boostMeter +=
+                            10.0f;
+
+
+                        if (boostMeter > MAX_BOOST)
+                        {
+                            boostMeter =
+                                MAX_BOOST;
+                        }
+
+
+                        SDL_Log(
+                            "PERFECT LANDING | BONUS: %d | COMBO: %d",
+                            landingBonus,
+                            comboCount
+                        );
+
+
+                        // If there was no flip on this landing,
+                        // show Perfect Landing as the main stunt text.
+                        if (!positiveFlipCompleted &&
+                            !negativeFlipCompleted)
+                        {
+                            if (comboCount > 1)
+                            {
+                                SDL_snprintf(
+                                    landingText,
+                                    sizeof(landingText),
+                                    "PERFECT LANDING! +%d   COMBO x%d",
+                                    landingBonus,
+                                    comboCount
+                                );
+                            }
+                            else
+                            {
+                                SDL_snprintf(
+                                    landingText,
+                                    sizeof(landingText),
+                                    "PERFECT LANDING! +%d",
+                                    landingBonus
+                                );
+                            }
+
+
+                            landingTextTimer =
+                                1.2f;
+                        }
                     }
 
                     // Reset jump data.
@@ -3112,6 +3447,10 @@ int main(int argc, char* argv[])
             airTime,
             stuntText,
             stuntTextTimer,
+            landingText,
+            landingTextTimer,
+            comboCount,
+            comboTimer,
             score,
             bestTime,
             newBestTime,
