@@ -34,6 +34,10 @@ Bike CreateBike(
     chassisShapeDef.density =
         1.0f;
 
+    // Racers do not collide with each other.
+    chassisShapeDef.filter.groupIndex =
+        -1;
+
     b2Polygon chassisShape =
         b2MakeBox(
             BIKE_CHASSIS_WIDTH / 2.0f,
@@ -78,6 +82,9 @@ Bike CreateBike(
 
     rearWheelShapeDef.density =
         1.0f;
+
+    rearWheelShapeDef.filter.groupIndex =
+        -1;
 
     b2Circle rearWheelCircle;
 
@@ -131,6 +138,9 @@ Bike CreateBike(
 
     frontWheelShapeDef.density =
         1.0f;
+
+    frontWheelShapeDef.filter.groupIndex =
+        -1;
 
     b2Circle frontWheelCircle;
 

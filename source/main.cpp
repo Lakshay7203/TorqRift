@@ -11,6 +11,7 @@
 #include <cmath>
 #include "ParticleSystem.h"
 #include "Environment.h"
+#include "AIController.h"
 
 // ---------------------------------------------------------
 // CONSTANTS
@@ -2555,6 +2556,8 @@ int main(int argc, char* argv[])
     InputState input;
 
     bool bikeGrounded = true;
+
+    bool aiBikeGrounded = true;
     
     bool levelComplete = false; 
 
@@ -2717,45 +2720,104 @@ int main(int argc, char* argv[])
         {
             if (levelComplete)
             {
-                checkpointReached = false;
+                // =================================================
+                // FULL RACE RESTART
+                // =================================================
+
+                checkpointReached =
+                    false;
 
                 respawnPosition =
-                    b2Vec2{ 0.0f, -7.0f };
+                    playerSpawnPosition;
 
-                levelTime = 0.0f;
+                levelTime =
+                    0.0f;
 
-                // Full new run.
-                score = 0;
-                checkpointScore = 0;
+                score =
+                    0;
+
+                checkpointScore =
+                    0;
+
+
+                // Reset player.
+                ResetBike(
+                    bike,
+                    playerSpawnPosition
+                );
+
+
+                // Reset AI opponent.
+                ResetBike(
+                    aiBike,
+                    aiSpawnPosition
+                );
+
+
+                bikeGrounded =
+                    true;
+
+                aiBikeGrounded =
+                    true;
+
+                cameraX =
+                    playerSpawnPosition.x;
+
+                levelComplete =
+                    false;
+            }
+            else
+            {
+                // =================================================
+                // PLAYER CRASH / CHECKPOINT RESPAWN
+                // =================================================
+
+                ResetBike(
+                    bike,
+                    respawnPosition
+                );
+
+
+                bikeGrounded =
+                    true;
+
+                cameraX =
+                    respawnPosition.x;
             }
 
-            ResetBike(
-                bike,
-                respawnPosition
-            );
 
-            cameraX = respawnPosition.x;
+            // Restore score from checkpoint.
+            score =
+                checkpointScore;
 
-            bikeGrounded = true;
-            levelComplete = false;
 
-            // Restore score from last checkpoint.
-            score = checkpointScore;
+            // Clear player stunt state.
+            airTime =
+                0.0f;
 
-            // Clear stunt state.
-            airTime = 0.0f;
-            wasBikeGrounded = true;
+            wasBikeGrounded =
+                true;
 
-            accumulatedRotation = 0.0f;
+            accumulatedRotation =
+                0.0f;
 
-            positiveFlipCompleted = false;
-            negativeFlipCompleted = false;
+            positiveFlipCompleted =
+                false;
 
-            stuntText[0] = '\0';
-            stuntTextTimer = 0.0f;
+            negativeFlipCompleted =
+                false;
 
-            landingText[0] = '\0';
-            landingTextTimer = 0.0f;
+            stuntText[0] =
+                '\0';
+
+            stuntTextTimer =
+                0.0f;
+
+            landingText[0] =
+                '\0';
+
+            landingTextTimer =
+                0.0f;
 
             particleSystem.Clear();
         }
@@ -2775,6 +2837,26 @@ int main(int argc, char* argv[])
                 bikeGrounded,
                 levelComplete,
                 boostActive
+            );
+
+                
+               // AI CONTROLS
+                
+
+            InputState aiInput =
+                BuildAIInput(
+                    aiBike,
+                    aiBikeGrounded,
+                    levelComplete
+                );
+
+
+            UpdateBikeControls(
+                aiBike,
+                aiInput,
+                aiBikeGrounded,
+                levelComplete,
+                false
             );
 
             // ---------------------------------------------
@@ -2842,9 +2924,14 @@ int main(int argc, char* argv[])
             bikeGrounded =
                 IsBikeGrounded(bike);
 
+            aiBikeGrounded =
+                IsBikeGrounded(
+                    aiBike
+                );
+
             // ---------------------------------------------
-// WHEELIE DETECTION
-// ---------------------------------------------
+            // WHEELIE DETECTION
+            // ---------------------------------------------
 
             bool rearWheelGrounded =
                 IsRearWheelGrounded(bike);
@@ -3371,6 +3458,17 @@ int main(int argc, char* argv[])
             LimitBikeAngularSpeed(
                 bike,
                 bikeGrounded
+            );
+
+            LimitBikeAngularSpeed(
+                bike,
+                bikeGrounded
+            );
+
+
+            LimitBikeAngularSpeed(
+                aiBike,
+                aiBikeGrounded
             );
 
 
