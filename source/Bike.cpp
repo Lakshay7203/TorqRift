@@ -1,6 +1,8 @@
 #include "Bike.h"
 
-Bike CreateBike(b2WorldId worldId)
+Bike CreateBike(
+    b2WorldId worldId,
+    b2Vec2 spawnPosition)
 {
     Bike bike;
 
@@ -18,7 +20,7 @@ Bike CreateBike(b2WorldId worldId)
         0.5f;
 
     chassisBodyDef.position =
-        b2Vec2{ 0.0f, -7.0f };
+        spawnPosition;
 
     bike.chassisBodyId =
         b2CreateBody(
@@ -56,7 +58,11 @@ Bike CreateBike(b2WorldId worldId)
         b2_dynamicBody;
 
     rearWheelBodyDef.position =
-        b2Vec2{ -0.8f, -7.65f };
+        b2Vec2
+    {
+        spawnPosition.x - 0.8f,
+        spawnPosition.y - 0.65f
+    };
 
     bike.rearWheelBodyId =
         b2CreateBody(
@@ -105,7 +111,11 @@ Bike CreateBike(b2WorldId worldId)
         b2_dynamicBody;
 
     frontWheelBodyDef.position =
-        b2Vec2{ 0.8f, -7.65f };
+        b2Vec2
+    {
+        spawnPosition.x + 0.8f,
+        spawnPosition.y - 0.65f
+    };
 
     bike.frontWheelBodyId =
         b2CreateBody(

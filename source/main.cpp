@@ -1222,7 +1222,7 @@ void DrawWheelSprite(
         PIXELS_PER_METER;
 
     // Compensates for transparent padding around our PNG.
-    constexpr float WHEEL_VISUAL_SCALE = 1.8f;
+    constexpr float WHEEL_VISUAL_SCALE = 1.55f;
 
     float wheelSize =
         physicsDiameter *
@@ -1257,15 +1257,14 @@ void DrawBikeSprite(
         57.2957795f;
 
     // Dimensions of our generated rider_chassis.png.
-    constexpr float ART_WIDTH = 1536.0f;
-    constexpr float ART_HEIGHT = 1024.0f;
+    constexpr float ART_WIDTH = 1448.0f;
+    constexpr float ART_HEIGHT = 1086.0f;
 
-    // Axle-hole positions inside the PNG.
-    constexpr float REAR_AXLE_X = 220.0f;
-    constexpr float REAR_AXLE_Y = 854.0f;
+    constexpr float REAR_AXLE_X = 249.0f;
+    constexpr float REAR_AXLE_Y = 889.0f;
 
-    constexpr float FRONT_AXLE_X = 1258.0f;
-    constexpr float FRONT_AXLE_Y = 913.0f;
+    constexpr float FRONT_AXLE_X = 1208.0f;
+    constexpr float FRONT_AXLE_Y = 946.0f;
 
     // -------------------------------------------------
     // DISTANCE BETWEEN PHYSICS WHEELS
@@ -1400,6 +1399,8 @@ void Render(
     b2BodyId chassisBodyId,
     b2BodyId rearWheelBodyId,
     b2BodyId frontWheelBodyId,
+    b2BodyId aiRearWheelBodyId,
+    b2BodyId aiFrontWheelBodyId,
     float cameraX,
     Environment& environment,
     const SDL_FRect& groundRect,
@@ -1695,9 +1696,9 @@ void Render(
                 endScreen.y + thickness
             );
         }
-// =====================================================
-// NATURAL GRASS TUFTS
-// =====================================================
+            // =====================================================
+            // NATURAL GRASS TUFTS
+            // =====================================================
 
         float terrainDX =
             endScreen.x - startScreen.x;
@@ -1855,9 +1856,9 @@ void Render(
         );
     }
 
-// =====================================================
-// FINISH LINE
-// =====================================================
+        // =====================================================
+        // FINISH LINE
+        // =====================================================
 
     DrawFinishLine(
         renderer,
@@ -1870,9 +1871,9 @@ void Render(
         checkpointReached
     );
 
-    // =====================================================
-    // PARTICLE EFFECTS
-    // =====================================================
+        // =====================================================
+        // PARTICLE EFFECTS
+        // =====================================================
 
     particleSystem.Render(
         renderer,
@@ -1880,15 +1881,15 @@ void Render(
     );
 
 
-    // =====================================================
- // BIKE VISUALS
- // Chassis follows chassis physics.
- // Wheels follow wheel physics independently.
- // =====================================================
+        
+     // BIKE VISUALS
+     // Chassis follows chassis physics.
+     // Wheels follow wheel physics independently.
+     // =====================================================
 
- // -----------------------------------------------------
- // CHASSIS PHYSICS POSITION + ROTATION
- // -----------------------------------------------------
+     // -----------------------------------------------------
+     // CHASSIS PHYSICS POSITION + ROTATION
+     // -----------------------------------------------------
 
     b2Vec2 chassisPosition =
         b2Body_GetPosition(chassisBodyId);
@@ -2231,6 +2232,79 @@ void Render(
     );
 
     // =====================================================
+    // AI RACER
+    // =====================================================
+
+    b2Vec2 aiRearWheelPosition =
+        b2Body_GetPosition(
+            aiRearWheelBodyId
+        );
+
+    b2Vec2 aiFrontWheelPosition =
+        b2Body_GetPosition(
+            aiFrontWheelBodyId
+        );
+
+
+    SDL_FPoint aiRearWheelScreen;
+
+    aiRearWheelScreen.x =
+        CAMERA_TARGET_X +
+        (
+            aiRearWheelPosition.x -
+            cameraX
+            ) *
+        PIXELS_PER_METER;
+
+    aiRearWheelScreen.y =
+        SCREEN_CENTER_Y -
+        aiRearWheelPosition.y *
+        PIXELS_PER_METER;
+
+
+    SDL_FPoint aiFrontWheelScreen;
+
+    aiFrontWheelScreen.x =
+        CAMERA_TARGET_X +
+        (
+            aiFrontWheelPosition.x -
+            cameraX
+            ) *
+        PIXELS_PER_METER;
+
+    aiFrontWheelScreen.y =
+        SCREEN_CENTER_Y -
+        aiFrontWheelPosition.y *
+        PIXELS_PER_METER;
+
+
+    // Rider + motorcycle frame.
+    DrawBikeSprite(
+        renderer,
+        bikeTexture,
+        aiRearWheelScreen,
+        aiFrontWheelScreen
+    );
+
+
+    // Rear wheel.
+    DrawWheelSprite(
+        renderer,
+        wheelTexture,
+        aiRearWheelBodyId,
+        aiRearWheelScreen
+    );
+
+
+    // Front wheel.
+    DrawWheelSprite(
+        renderer,
+        wheelTexture,
+        aiFrontWheelBodyId,
+        aiFrontWheelScreen
+    );
+
+    // =====================================================
     // UI
     // =====================================================
 
@@ -2428,8 +2502,31 @@ int main(int argc, char* argv[])
     Terrain terrain =
         CreateTerrain(worldId);
 
+    const b2Vec2 playerSpawnPosition =
+    {
+        0.0f,
+        -7.0f
+    };
+
+    const b2Vec2 aiSpawnPosition =
+    {
+        -3.0f,
+        -7.0f
+    };
+
+
     Bike bike =
-        CreateBike(worldId);
+        CreateBike(
+            worldId,
+            playerSpawnPosition
+        );
+
+
+    Bike aiBike =
+        CreateBike(
+            worldId,
+            aiSpawnPosition
+        );
 
 
     // =====================================================
@@ -3435,6 +3532,8 @@ int main(int argc, char* argv[])
             bike.chassisBodyId,
             bike.rearWheelBodyId,
             bike.frontWheelBodyId,
+            aiBike.rearWheelBodyId,
+            aiBike.frontWheelBodyId,
             cameraX,
             environment,
             groundRect,

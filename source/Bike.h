@@ -21,7 +21,10 @@ struct Bike
     b2JointId frontWheelJointId;
 };
 
-Bike CreateBike(b2WorldId worldId);
+Bike CreateBike(
+    b2WorldId worldId,
+    b2Vec2 spawnPosition
+);
 
 void ResetBike(
     Bike& bike,
