@@ -12,6 +12,7 @@
 #include "ParticleSystem.h"
 #include "Environment.h"
 #include "AIController.h"
+#include "Racer.h"
 
 // ---------------------------------------------------------
 // CONSTANTS
@@ -2516,19 +2517,38 @@ int main(int argc, char* argv[])
     };
 
 
-    Bike bike =
+    Racer playerRacer;
+
+    playerRacer.isPlayer = true;
+
+    playerRacer.spawnPosition =
+    {
+        0.0f,
+        -7.0f
+    };
+
+    playerRacer.bike =
         CreateBike(
             worldId,
-            playerSpawnPosition
+            playerRacer.spawnPosition
         );
 
 
-    Bike aiBike =
+    Racer aiRacer1;
+
+    aiRacer1.isPlayer = false;
+
+    aiRacer1.spawnPosition =
+    {
+        -3.0f,
+        -7.0f
+    };
+
+    aiRacer1.bike =
         CreateBike(
             worldId,
-            aiSpawnPosition
+            aiRacer1.spawnPosition
         );
-
 
     // =====================================================
     // PHYSICS SETTINGS
@@ -2554,10 +2574,6 @@ int main(int argc, char* argv[])
         SDL_GetTicksNS();
 
     InputState input;
-
-    bool bikeGrounded = true;
-
-    bool aiBikeGrounded = true;
     
     bool levelComplete = false; 
 
@@ -2577,6 +2593,8 @@ int main(int argc, char* argv[])
     bool positiveFlipCompleted = false;
     bool negativeFlipCompleted = false;
     int flipCount = 0;
+
+    int nextFinishPlace = 1;
 
     ParticleSystem particleSystem;
 
@@ -2720,66 +2738,68 @@ int main(int argc, char* argv[])
         {
             if (levelComplete)
             {
-                // =================================================
-                // FULL RACE RESTART
-                // =================================================
+                // =============================================
+                // FULL NEW RACE
+                // =============================================
 
-                checkpointReached =
-                    false;
+                checkpointReached = false;
 
                 respawnPosition =
-                    playerSpawnPosition;
+                    playerRacer.spawnPosition;
 
-                levelTime =
-                    0.0f;
+                levelTime = 0.0f;
 
-                score =
-                    0;
+                score = 0;
 
-                checkpointScore =
-                    0;
+                checkpointScore = 0;
 
 
-                // Reset player.
                 ResetBike(
-                    bike,
-                    playerSpawnPosition
+                    playerRacer.bike,
+                    playerRacer.spawnPosition
+                );
+
+                ResetBike(
+                    aiRacer1.bike,
+                    aiRacer1.spawnPosition
                 );
 
 
-                // Reset AI opponent.
-                ResetBike(
-                    aiBike,
-                    aiSpawnPosition
-                );
+                // =============================================
+                // RESET RACER STATE
+                // =============================================
+
+                playerRacer.finished = false;
+                playerRacer.finishPlace = 0;
+                playerRacer.currentPosition = 0;
+
+                aiRacer1.finished = false;
+                aiRacer1.finishPlace = 0;
+                aiRacer1.currentPosition = 0;
+
+                nextFinishPlace = 1;
 
 
-                bikeGrounded =
-                    true;
-
-                aiBikeGrounded =
-                    true;
+                playerRacer.grounded = true;
+                aiRacer1.grounded = true;
 
                 cameraX =
-                    playerSpawnPosition.x;
+                    playerRacer.spawnPosition.x;
 
-                levelComplete =
-                    false;
+                levelComplete = false;
             }
             else
             {
-                // =================================================
-                // PLAYER CRASH / CHECKPOINT RESPAWN
-                // =================================================
+                // =============================================
+                // NORMAL CRASH / CHECKPOINT RESPAWN
+                // =============================================
 
                 ResetBike(
-                    bike,
+                    playerRacer.bike,
                     respawnPosition
                 );
 
-
-                bikeGrounded =
-                    true;
+                playerRacer.grounded = true;
 
                 cameraX =
                     respawnPosition.x;
@@ -2832,10 +2852,10 @@ int main(int argc, char* argv[])
         while (physicsAccumulator >= physicsTimeStep)
         {
             UpdateBikeControls(
-                bike,
+                playerRacer.bike,
                 input,
-                bikeGrounded,
-                levelComplete,
+                playerRacer.grounded,
+                playerRacer.finished,
                 boostActive
             );
 
@@ -2845,17 +2865,17 @@ int main(int argc, char* argv[])
 
             InputState aiInput =
                 BuildAIInput(
-                    aiBike,
-                    aiBikeGrounded,
-                    levelComplete
+                    aiRacer1.bike,
+                    aiRacer1.grounded,
+                    aiRacer1.finished
                 );
 
 
             UpdateBikeControls(
-                aiBike,
+                aiRacer1.bike,
                 aiInput,
-                aiBikeGrounded,
-                levelComplete,
+                aiRacer1.grounded,
+                aiRacer1.finished,
                 false
             );
 
@@ -2866,24 +2886,24 @@ int main(int argc, char* argv[])
             const float jumpVelocityChange = 3.5f;
 
             if (input.jumpPressed &&
-                bikeGrounded &&
-                !levelComplete)
+                playerRacer.grounded &&
+                !playerRacer.finished)
             {
                 // Get each body's mass.
                 const float chassisMass =
-                    b2Body_GetMass(bike.chassisBodyId);
+                    b2Body_GetMass(playerRacer.bike.chassisBodyId);
 
                 const float rearWheelMass =
-                    b2Body_GetMass(bike.rearWheelBodyId);
+                    b2Body_GetMass(playerRacer.bike.rearWheelBodyId);
 
                 const float frontWheelMass =
-                    b2Body_GetMass(bike.frontWheelBodyId);
+                    b2Body_GetMass(playerRacer.bike.frontWheelBodyId);
 
 
                 // Give every part of the bike the same
                 // upward velocity change.
                 b2Body_ApplyLinearImpulseToCenter(
-                    bike.chassisBodyId,
+                    playerRacer.bike.chassisBodyId,
                     b2Vec2{
                         0.0f,
                         chassisMass * jumpVelocityChange
@@ -2892,7 +2912,7 @@ int main(int argc, char* argv[])
                 );
 
                 b2Body_ApplyLinearImpulseToCenter(
-                    bike.rearWheelBodyId,
+                    playerRacer.bike.rearWheelBodyId,
                     b2Vec2{
                         0.0f,
                         rearWheelMass * jumpVelocityChange
@@ -2901,7 +2921,7 @@ int main(int argc, char* argv[])
                 );
 
                 b2Body_ApplyLinearImpulseToCenter(
-                    bike.frontWheelBodyId,
+                    playerRacer.bike.frontWheelBodyId,
                     b2Vec2{
                         0.0f,
                         frontWheelMass * jumpVelocityChange
@@ -2921,35 +2941,38 @@ int main(int argc, char* argv[])
                 subStepCount
             );
 
-            bikeGrounded =
-                IsBikeGrounded(bike);
 
-            aiBikeGrounded =
+            playerRacer.grounded =
                 IsBikeGrounded(
-                    aiBike
+                    playerRacer.bike
                 );
 
+
+            aiRacer1.grounded =
+                IsBikeGrounded(
+                    aiRacer1.bike
+                );
             // ---------------------------------------------
             // WHEELIE DETECTION
             // ---------------------------------------------
 
             bool rearWheelGrounded =
-                IsRearWheelGrounded(bike);
+                IsRearWheelGrounded(playerRacer.bike);
 
             bool frontWheelGrounded =
-                IsFrontWheelGrounded(bike);
+                IsFrontWheelGrounded(playerRacer.bike);
 
 
             b2Vec2 chassisVelocity =
                 b2Body_GetLinearVelocity(
-                    bike.chassisBodyId
+                    playerRacer.bike.chassisBodyId
                 );
 
 
             float currentChassisAngle =
                 b2Rot_GetAngle(
                     b2Body_GetRotation(
-                        bike.chassisBodyId
+                        playerRacer.bike.chassisBodyId
                     )
                 );
 
@@ -3014,7 +3037,7 @@ int main(int argc, char* argv[])
 
                     b2Vec2 rearWheelPosition =
                         b2Body_GetPosition(
-                            bike.rearWheelBodyId
+                            playerRacer.bike.rearWheelBodyId
                         );
 
                     particleSystem.SpawnWheelieDust(
@@ -3050,11 +3073,11 @@ int main(int argc, char* argv[])
 
             bool justLeftGround =
                 wasBikeGrounded &&
-                !bikeGrounded;
+                !playerRacer.grounded;
 
             bool justLanded =
                 !wasBikeGrounded &&
-                bikeGrounded;
+                playerRacer.grounded;
             if (justLeftGround)
             {
                 SDL_Log("LEFT GROUND");
@@ -3072,7 +3095,7 @@ int main(int argc, char* argv[])
             float currentBikeAngle =
                 b2Rot_GetAngle(
                     b2Body_GetRotation(
-                        bike.chassisBodyId
+                        playerRacer.bike.chassisBodyId
                     )
                 );
 
@@ -3086,7 +3109,7 @@ int main(int argc, char* argv[])
 
                 flipCount = 0;
             }
-            if (!bikeGrounded)
+            if (!playerRacer.grounded)
             {
                 float angleDifference =
                     currentBikeAngle -
@@ -3136,17 +3159,18 @@ int main(int argc, char* argv[])
             {
                 boostActive = true;
                 UpdateBikeControls(
-                bike,
-                input,
-                bikeGrounded,
-                levelComplete,
-                boostActive
-);
+                    playerRacer.bike,
+                    input,
+                    playerRacer.grounded,
+                    playerRacer.finished,
+                    boostActive
+                );
+
                 boostMeter = MAX_BOOST;
 
                 b2Vec2 rearWheelPosition =
                     b2Body_GetPosition(
-                        bike.rearWheelBodyId
+                        playerRacer.bike.rearWheelBodyId
                     );
 
                 particleSystem.SpawnBoostBurst(
@@ -3183,7 +3207,7 @@ int main(int argc, char* argv[])
             // AIR TIME
             // ---------------------------------------------
 
-            if (!bikeGrounded)
+            if (!playerRacer.grounded)
             {
                 airTime += physicsTimeStep;
             }
@@ -3210,7 +3234,7 @@ int main(int argc, char* argv[])
 
                     float landingAngularSpeed =
                         b2Body_GetAngularVelocity(
-                            bike.chassisBodyId
+                            playerRacer.bike.chassisBodyId
                         );
 
 
@@ -3429,72 +3453,82 @@ int main(int argc, char* argv[])
                     accumulatedRotation = 0.0f;
                 }
 
-            wasBikeGrounded = bikeGrounded;
+            wasBikeGrounded = playerRacer.grounded;
 
             if (levelComplete)
             {
                 SDL_SetWindowTitle(
                     window,
-                    "TrailTorque - LEVEL COMPLETE!"
+                    "TorqRift - LEVEL COMPLETE!"
                 );
             }
 
-            else if (bikeGrounded)
+            else if (playerRacer.grounded)
             {
                 SDL_SetWindowTitle(
                     window,
-                    "TrailTorque - GROUND"
+                    "TorqRift - GROUND"
                 );
             }
             else
             {
                 SDL_SetWindowTitle(
                     window,
-                    "TrailTorque - AIR"
+                    "TorqRift - AIR"
                 );
             
             }
 
             LimitBikeAngularSpeed(
-                bike,
-                bikeGrounded
-            );
-
-            LimitBikeAngularSpeed(
-                bike,
-                bikeGrounded
+                playerRacer.bike,
+                playerRacer.grounded
             );
 
 
             LimitBikeAngularSpeed(
-                aiBike,
-                aiBikeGrounded
+                aiRacer1.bike,
+                aiRacer1.grounded
             );
 
 
             physicsAccumulator -= physicsTimeStep;
         }
+        
 
-
-        // =================================================
-        // READ CURRENT BOX2D POSITIONS
-        // IMPORTANT: these must update EVERY FRAME.
-        // =================================================
-
-        b2Vec2 chassisPosition =
+        b2Vec2 playerPosition =
             b2Body_GetPosition(
-                bike.chassisBodyId
+                playerRacer.bike.chassisBodyId
+            );
+
+
+        b2Vec2 aiPosition =
+            b2Body_GetPosition(
+                aiRacer1.bike.chassisBodyId
             );
 
         environment.Update(
-            chassisPosition.x,
+            playerPosition.x,
             deltaTime
         );
 
-        if (!levelComplete &&
-            chassisPosition.x >= FINISH_X)
+        // =================================================
+        // FINISH ORDER
+        // =================================================
+
+        if (!playerRacer.finished &&
+            playerPosition.x >= FINISH_X)
         {
+            playerRacer.finished = true;
+
+            playerRacer.finishPlace =
+                nextFinishPlace;
+
+            ++nextFinishPlace;
+
+
+            // Keep existing UI working for now.
             levelComplete = true;
+
 
             newBestTime = false;
 
@@ -3506,8 +3540,20 @@ int main(int argc, char* argv[])
             }
         }
 
+
+        if (!aiRacer1.finished &&
+            aiPosition.x >= FINISH_X)
+        {
+            aiRacer1.finished = true;
+
+            aiRacer1.finishPlace =
+                nextFinishPlace;
+
+            ++nextFinishPlace;
+        }
+
         if (!checkpointReached &&
-            chassisPosition.x >= CHECKPOINT_X)
+            playerPosition.x >= CHECKPOINT_X)
         {
             checkpointReached = true;
 
@@ -3517,24 +3563,56 @@ int main(int argc, char* argv[])
             checkpointScore = score;
         }
 
+        // =================================================
+        // LIVE RACE POSITION
+        // =================================================
+
+        if (!playerRacer.finished &&
+            !aiRacer1.finished)
+        {
+            if (playerPosition.x >= aiPosition.x)
+            {
+                playerRacer.currentPosition = 1;
+                aiRacer1.currentPosition = 2;
+            }
+            else
+            {
+                playerRacer.currentPosition = 2;
+                aiRacer1.currentPosition = 1;
+            }
+        }
+
+        if (playerRacer.finished)
+        {
+            playerRacer.currentPosition =
+                playerRacer.finishPlace;
+        }
+
+        if (aiRacer1.finished)
+        {
+            aiRacer1.currentPosition =
+                aiRacer1.finishPlace;
+        }
+
+
         // Camera gradually catches up to the bike.
         const float cameraFollowSpeed = 3.0f;
 
         cameraX +=
-            (chassisPosition.x - cameraX) *
+            (playerPosition.x - cameraX) *
             cameraFollowSpeed *
             deltaTime;
      
 
         b2Vec2 rearWheelPosition =
             b2Body_GetPosition(
-                bike.rearWheelBodyId
+                playerRacer.bike.rearWheelBodyId
             );
 
 
         b2Vec2 frontWheelPosition =
             b2Body_GetPosition(
-                bike.frontWheelBodyId
+                playerRacer.bike.frontWheelBodyId
             );
 
 
@@ -3627,11 +3705,11 @@ int main(int argc, char* argv[])
             stuntFont,
             bikeTexture,
             wheelTexture,
-            bike.chassisBodyId,
-            bike.rearWheelBodyId,
-            bike.frontWheelBodyId,
-            aiBike.rearWheelBodyId,
-            aiBike.frontWheelBodyId,
+            playerRacer.bike.chassisBodyId,
+            playerRacer.bike.rearWheelBodyId,
+            playerRacer.bike.frontWheelBodyId,
+            aiRacer1.bike.rearWheelBodyId,
+            aiRacer1.bike.frontWheelBodyId,
             cameraX,
             environment,
             groundRect,
