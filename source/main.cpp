@@ -1388,6 +1388,315 @@ void DrawBikeSprite(
     );
 }
 
+void DrawRacePositionBadge(
+    SDL_Renderer* renderer,
+    TTF_Font* font,
+    float centerX,
+    float centerY,
+    int position)
+{
+    if (position <= 0)
+    {
+        return;
+    }
+
+    // =====================================================
+    // BADGE DIMENSIONS
+    // =====================================================
+
+    constexpr float width = 66.0f;
+    constexpr float height = 48.0f;
+    constexpr float cornerCut = 9.0f;
+
+    constexpr float borderSize = 4.0f;
+
+    constexpr float pointerWidth = 18.0f;
+    constexpr float pointerHeight = 13.0f;
+
+
+    // =====================================================
+    // HELPER: DRAW ANGLED RECTANGLE
+    // =====================================================
+
+    auto DrawAngledBox =
+        [&](float x,
+            float y,
+            float w,
+            float h,
+            float cut,
+            SDL_FColor color)
+        {
+            SDL_Vertex vertices[9]{};
+
+            // Center vertex.
+            vertices[0].position =
+            {
+                x + w / 2.0f,
+                y + h / 2.0f
+            };
+
+            // Top-left angled point.
+            vertices[1].position =
+            {
+                x + cut,
+                y
+            };
+
+            // Top-right.
+            vertices[2].position =
+            {
+                x + w - cut,
+                y
+            };
+
+            vertices[3].position =
+            {
+                x + w,
+                y + cut
+            };
+
+            // Bottom-right.
+            vertices[4].position =
+            {
+                x + w,
+                y + h - cut
+            };
+
+            vertices[5].position =
+            {
+                x + w - cut,
+                y + h
+            };
+
+            // Bottom-left.
+            vertices[6].position =
+            {
+                x + cut,
+                y + h
+            };
+
+            vertices[7].position =
+            {
+                x,
+                y + h - cut
+            };
+
+            vertices[8].position =
+            {
+                x,
+                y + cut
+            };
+
+
+            for (SDL_Vertex& vertex : vertices)
+            {
+                vertex.color = color;
+            }
+
+
+            const int indices[] =
+            {
+                0, 1, 2,
+                0, 2, 3,
+                0, 3, 4,
+                0, 4, 5,
+                0, 5, 6,
+                0, 6, 7,
+                0, 7, 8,
+                0, 8, 1
+            };
+
+
+            SDL_RenderGeometry(
+                renderer,
+                nullptr,
+                vertices,
+                9,
+                indices,
+                24
+            );
+        };
+
+
+    // =====================================================
+    // OUTER DARK BORDER
+    // =====================================================
+
+    const float outerX =
+        centerX - width / 2.0f;
+
+    const float outerY =
+        centerY - height / 2.0f;
+
+
+    SDL_FColor darkColor =
+    {
+        20.0f / 255.0f,
+        25.0f / 255.0f,
+        30.0f / 255.0f,
+        1.0f
+    };
+
+
+    DrawAngledBox(
+        outerX,
+        outerY,
+        width,
+        height,
+        cornerCut,
+        darkColor
+    );
+
+
+    // =====================================================
+    // INNER WHITE BADGE
+    // =====================================================
+
+    SDL_FColor whiteColor =
+    {
+        245.0f / 255.0f,
+        245.0f / 255.0f,
+        245.0f / 255.0f,
+        1.0f
+    };
+
+
+    DrawAngledBox(
+        outerX + borderSize,
+        outerY + borderSize,
+        width - borderSize * 2.0f,
+        height - borderSize * 2.0f,
+        cornerCut - 2.0f,
+        whiteColor
+    );
+
+
+    // =====================================================
+    // POINTER BORDER
+    // =====================================================
+
+    SDL_Vertex pointerBorder[3]{};
+
+    pointerBorder[0].position =
+    {
+        centerX - pointerWidth / 2.0f - 3.0f,
+        outerY + height - 1.0f
+    };
+
+    pointerBorder[1].position =
+    {
+        centerX + pointerWidth / 2.0f + 3.0f,
+        outerY + height - 1.0f
+    };
+
+    pointerBorder[2].position =
+    {
+        centerX,
+        outerY + height +
+        pointerHeight + 4.0f
+    };
+
+
+    for (SDL_Vertex& vertex : pointerBorder)
+    {
+        vertex.color = darkColor;
+    }
+
+
+    const int triangleIndices[] =
+    {
+        0, 1, 2
+    };
+
+
+    SDL_RenderGeometry(
+        renderer,
+        nullptr,
+        pointerBorder,
+        3,
+        triangleIndices,
+        3
+    );
+
+
+    // =====================================================
+    // WHITE POINTER
+    // =====================================================
+
+    SDL_Vertex pointer[3]{};
+
+    pointer[0].position =
+    {
+        centerX - pointerWidth / 2.0f,
+        outerY + height - 1.0f
+    };
+
+    pointer[1].position =
+    {
+        centerX + pointerWidth / 2.0f,
+        outerY + height - 1.0f
+    };
+
+    pointer[2].position =
+    {
+        centerX,
+        outerY + height +
+        pointerHeight
+    };
+
+
+    for (SDL_Vertex& vertex : pointer)
+    {
+        vertex.color = whiteColor;
+    }
+
+
+    SDL_RenderGeometry(
+        renderer,
+        nullptr,
+        pointer,
+        3,
+        triangleIndices,
+        3
+    );
+
+
+    // =====================================================
+    // POSITION NUMBER
+    // =====================================================
+
+    char positionText[16];
+
+    SDL_snprintf(
+        positionText,
+        sizeof(positionText),
+        "%d",
+        position
+    );
+
+
+    SDL_Color numberColor =
+    {
+        20,
+        25,
+        30,
+        255
+    };
+
+
+    DrawText(
+        renderer,
+        font,
+        positionText,
+
+        centerX - 11.0f,
+        centerY - 24.0f,
+
+        numberColor
+    );
+}
+
+
 // ---------------------------------------------------------
 // RENDER
 // ---------------------------------------------------------
@@ -1424,6 +1733,7 @@ void Render(
     bool newBestTime,
     float boostMeter,
     bool boostActive,
+    int playerRacePosition,
     const ParticleSystem& particleSystem)
 
 {
@@ -2304,6 +2614,16 @@ void Render(
         wheelTexture,
         aiFrontWheelBodyId,
         aiFrontWheelScreen
+    );
+
+    DrawRacePositionBadge(
+        renderer,
+        stuntFont,
+
+        chassisScreenX,
+        chassisScreenY - 120.0f,
+
+        playerRacePosition
     );
 
     // =====================================================
@@ -3731,6 +4051,7 @@ int main(int argc, char* argv[])
             newBestTime,
             boostMeter,
             boostActive,
+            playerRacer.currentPosition,
             particleSystem
         );
     }
