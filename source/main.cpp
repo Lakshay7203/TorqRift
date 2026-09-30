@@ -1710,8 +1710,7 @@ void Render(
     b2BodyId chassisBodyId,
     b2BodyId rearWheelBodyId,
     b2BodyId frontWheelBodyId,
-    b2BodyId aiRearWheelBodyId,
-    b2BodyId aiFrontWheelBodyId,
+    const std::vector<Racer>& aiRacers,
     float cameraX,
     Environment& environment,
     const SDL_FRect& groundRect,
@@ -2544,88 +2543,88 @@ void Render(
     );
 
     // =====================================================
-    // AI RACER
+    // AI RACERS
     // =====================================================
 
-    b2Vec2 aiRearWheelPosition =
-        b2Body_GetPosition(
-            aiRearWheelBodyId
+    for (const Racer& aiRacer : aiRacers)
+    {
+        b2Vec2 aiRearWheelPosition =
+            b2Body_GetPosition(
+                aiRacer.bike.rearWheelBodyId
+            );
+
+        b2Vec2 aiFrontWheelPosition =
+            b2Body_GetPosition(
+                aiRacer.bike.frontWheelBodyId
+            );
+
+
+        SDL_FPoint aiRearWheelScreen;
+
+        aiRearWheelScreen.x =
+            CAMERA_TARGET_X +
+            (
+                aiRearWheelPosition.x -
+                cameraX
+                ) *
+            PIXELS_PER_METER;
+
+        aiRearWheelScreen.y =
+            SCREEN_CENTER_Y -
+            aiRearWheelPosition.y *
+            PIXELS_PER_METER;
+
+
+        SDL_FPoint aiFrontWheelScreen;
+
+        aiFrontWheelScreen.x =
+            CAMERA_TARGET_X +
+            (
+                aiFrontWheelPosition.x -
+                cameraX
+                ) *
+            PIXELS_PER_METER;
+
+        aiFrontWheelScreen.y =
+            SCREEN_CENTER_Y -
+            aiFrontWheelPosition.y *
+            PIXELS_PER_METER;
+
+
+        DrawBikeSprite(
+            renderer,
+            bikeTexture,
+            aiRearWheelScreen,
+            aiFrontWheelScreen
         );
 
-    b2Vec2 aiFrontWheelPosition =
-        b2Body_GetPosition(
-            aiFrontWheelBodyId
+
+        DrawWheelSprite(
+            renderer,
+            wheelTexture,
+            aiRacer.bike.rearWheelBodyId,
+            aiRearWheelScreen
         );
 
 
-    SDL_FPoint aiRearWheelScreen;
-
-    aiRearWheelScreen.x =
-        CAMERA_TARGET_X +
-        (
-            aiRearWheelPosition.x -
-            cameraX
-            ) *
-        PIXELS_PER_METER;
-
-    aiRearWheelScreen.y =
-        SCREEN_CENTER_Y -
-        aiRearWheelPosition.y *
-        PIXELS_PER_METER;
+        DrawWheelSprite(
+            renderer,
+            wheelTexture,
+            aiRacer.bike.frontWheelBodyId,
+            aiFrontWheelScreen
+);
 
 
-    SDL_FPoint aiFrontWheelScreen;
+        DrawRacePositionBadge(
+            renderer,
+            stuntFont,
 
-    aiFrontWheelScreen.x =
-        CAMERA_TARGET_X +
-        (
-            aiFrontWheelPosition.x -
-            cameraX
-            ) *
-        PIXELS_PER_METER;
+            chassisScreenX,
+            chassisScreenY - 120.0f,
 
-    aiFrontWheelScreen.y =
-        SCREEN_CENTER_Y -
-        aiFrontWheelPosition.y *
-        PIXELS_PER_METER;
-
-
-    // Rider + motorcycle frame.
-    DrawBikeSprite(
-        renderer,
-        bikeTexture,
-        aiRearWheelScreen,
-        aiFrontWheelScreen
-    );
-
-
-    // Rear wheel.
-    DrawWheelSprite(
-        renderer,
-        wheelTexture,
-        aiRearWheelBodyId,
-        aiRearWheelScreen
-    );
-
-
-    // Front wheel.
-    DrawWheelSprite(
-        renderer,
-        wheelTexture,
-        aiFrontWheelBodyId,
-        aiFrontWheelScreen
-    );
-
-    DrawRacePositionBadge(
-        renderer,
-        stuntFont,
-
-        chassisScreenX,
-        chassisScreenY - 120.0f,
-
-        playerRacePosition
-    );
-
+            playerRacePosition
+        );
+    }
     // =====================================================
     // UI
     // =====================================================
@@ -2854,21 +2853,42 @@ int main(int argc, char* argv[])
         );
 
 
-    Racer aiRacer1;
+    // =====================================================
+    // AI RACERS
+    // =====================================================
 
-    aiRacer1.isPlayer = false;
+    std::vector<Racer> aiRacers;
 
-    aiRacer1.spawnPosition =
+    aiRacers.reserve(3);
+
+
+    const b2Vec2 aiSpawnPositions[3] =
     {
-        -3.0f,
-        -7.0f
+        { -2.5f, -7.0f },
+        { -5.0f, -7.0f },
+        { -7.5f, -7.0f }
     };
 
-    aiRacer1.bike =
-        CreateBike(
-            worldId,
-            aiRacer1.spawnPosition
+
+    for (const b2Vec2& spawnPosition : aiSpawnPositions)
+    {
+        Racer aiRacer;
+
+        aiRacer.isPlayer = false;
+
+        aiRacer.spawnPosition =
+            spawnPosition;
+
+        aiRacer.bike =
+            CreateBike(
+                worldId,
+                aiRacer.spawnPosition
+            );
+
+        aiRacers.push_back(
+            aiRacer
         );
+    }
 
     // =====================================================
     // PHYSICS SETTINGS
@@ -3079,10 +3099,13 @@ int main(int argc, char* argv[])
                     playerRacer.spawnPosition
                 );
 
-                ResetBike(
-                    aiRacer1.bike,
-                    aiRacer1.spawnPosition
-                );
+                for (Racer& aiRacer : aiRacers)
+                {
+                    ResetBike(
+                        aiRacer.bike,
+                        aiRacer.spawnPosition
+                    );
+                }
 
 
                 // =============================================
@@ -3093,15 +3116,18 @@ int main(int argc, char* argv[])
                 playerRacer.finishPlace = 0;
                 playerRacer.currentPosition = 0;
 
-                aiRacer1.finished = false;
-                aiRacer1.finishPlace = 0;
-                aiRacer1.currentPosition = 0;
-
+                for (Racer& aiRacer : aiRacers)
+                {
+                    aiRacer.finished = false;
+                    aiRacer.finishPlace = 0;
+                    aiRacer.currentPosition = 0;
+                    aiRacer.grounded = true;
+                }
                 nextFinishPlace = 1;
 
 
                 playerRacer.grounded = true;
-                aiRacer1.grounded = true;
+                
 
                 cameraX =
                     playerRacer.spawnPosition.x;
@@ -3183,21 +3209,23 @@ int main(int argc, char* argv[])
                // AI CONTROLS
                 
 
-            InputState aiInput =
-                BuildAIInput(
-                    aiRacer1.bike,
-                    aiRacer1.grounded,
-                    aiRacer1.finished
+            for (Racer& aiRacer : aiRacers)
+            {
+                InputState aiInput =
+                    BuildAIInput(
+                        aiRacer.bike,
+                        aiRacer.grounded,
+                        aiRacer.finished
+                    );
+
+                UpdateBikeControls(
+                    aiRacer.bike,
+                    aiInput,
+                    aiRacer.grounded,
+                    aiRacer.finished,
+                    false
                 );
-
-
-            UpdateBikeControls(
-                aiRacer1.bike,
-                aiInput,
-                aiRacer1.grounded,
-                aiRacer1.finished,
-                false
-            );
+            }
 
             // ---------------------------------------------
             // BUNNY HOP
@@ -3268,10 +3296,13 @@ int main(int argc, char* argv[])
                 );
 
 
-            aiRacer1.grounded =
-                IsBikeGrounded(
-                    aiRacer1.bike
-                );
+            for (Racer& aiRacer : aiRacers)
+            {
+                aiRacer.grounded =
+                    IsBikeGrounded(
+                        aiRacer.bike
+                    );
+            }
             // ---------------------------------------------
             // WHEELIE DETECTION
             // ---------------------------------------------
@@ -3805,10 +3836,13 @@ int main(int argc, char* argv[])
             );
 
 
-            LimitBikeAngularSpeed(
-                aiRacer1.bike,
-                aiRacer1.grounded
-            );
+            for (Racer& aiRacer : aiRacers)
+            {
+                LimitBikeAngularSpeed(
+                    aiRacer.bike,
+                    aiRacer.grounded
+                );
+            }
 
 
             physicsAccumulator -= physicsTimeStep;
@@ -3820,11 +3854,6 @@ int main(int argc, char* argv[])
                 playerRacer.bike.chassisBodyId
             );
 
-
-        b2Vec2 aiPosition =
-            b2Body_GetPosition(
-                aiRacer1.bike.chassisBodyId
-            );
 
         environment.Update(
             playerPosition.x,
@@ -3861,15 +3890,28 @@ int main(int argc, char* argv[])
         }
 
 
-        if (!aiRacer1.finished &&
-            aiPosition.x >= FINISH_X)
+        // =================================================
+        // AI FINISH ORDER
+        // =================================================
+
+        for (Racer& aiRacer : aiRacers)
         {
-            aiRacer1.finished = true;
+            b2Vec2 aiPosition =
+                b2Body_GetPosition(
+                    aiRacer.bike.chassisBodyId
+                );
 
-            aiRacer1.finishPlace =
-                nextFinishPlace;
 
-            ++nextFinishPlace;
+            if (!aiRacer.finished &&
+                aiPosition.x >= FINISH_X)
+            {
+                aiRacer.finished = true;
+
+                aiRacer.finishPlace =
+                    nextFinishPlace;
+
+                ++nextFinishPlace;
+            }
         }
 
         if (!checkpointReached &&
@@ -3887,31 +3929,108 @@ int main(int argc, char* argv[])
         // LIVE RACE POSITION
         // =================================================
 
-        if (!playerRacer.finished &&
-            !aiRacer1.finished)
-        {
-            if (playerPosition.x >= aiPosition.x)
-            {
-                playerRacer.currentPosition = 1;
-                aiRacer1.currentPosition = 2;
-            }
-            else
-            {
-                playerRacer.currentPosition = 2;
-                aiRacer1.currentPosition = 1;
-            }
-        }
+        // -------------------------------------------------
+        // PLAYER POSITION
+        // -------------------------------------------------
 
         if (playerRacer.finished)
         {
             playerRacer.currentPosition =
                 playerRacer.finishPlace;
         }
-
-        if (aiRacer1.finished)
+        else
         {
-            aiRacer1.currentPosition =
-                aiRacer1.finishPlace;
+            int position = 1;
+
+            for (Racer& aiRacer : aiRacers)
+            {
+                b2Vec2 aiPosition =
+                    b2Body_GetPosition(
+                        aiRacer.bike.chassisBodyId
+                    );
+
+                // A finished racer is automatically ahead.
+                // Otherwise compare track progress.
+                if (aiRacer.finished ||
+                    aiPosition.x > playerPosition.x)
+                {
+                    ++position;
+                }
+            }
+
+            playerRacer.currentPosition =
+                position;
+        }
+
+
+        // -------------------------------------------------
+        // AI POSITIONS
+        // -------------------------------------------------
+
+        for (size_t i = 0; i < aiRacers.size(); ++i)
+        {
+            Racer& aiRacer =
+                aiRacers[i];
+
+
+            if (aiRacer.finished)
+            {
+                aiRacer.currentPosition =
+                    aiRacer.finishPlace;
+
+                continue;
+            }
+
+
+            b2Vec2 aiPosition =
+                b2Body_GetPosition(
+                    aiRacer.bike.chassisBodyId
+                );
+
+
+            int position = 1;
+
+
+            // Is the player ahead of this AI?
+            if (playerRacer.finished ||
+                playerPosition.x > aiPosition.x)
+            {
+                ++position;
+            }
+
+
+            // Compare against every other AI racer.
+            for (size_t j = 0;
+                j < aiRacers.size();
+                ++j)
+            {
+                // Don't compare a racer against itself.
+                if (i == j)
+                {
+                    continue;
+                }
+
+
+                Racer& otherAI =
+                    aiRacers[j];
+
+
+                b2Vec2 otherPosition =
+                    b2Body_GetPosition(
+                        otherAI.bike.chassisBodyId
+                    );
+
+
+                if (otherAI.finished ||
+                    otherPosition.x > aiPosition.x)
+                {
+                    ++position;
+                }
+            }
+
+
+            aiRacer.currentPosition =
+                position;
         }
 
 
@@ -4028,8 +4147,7 @@ int main(int argc, char* argv[])
             playerRacer.bike.chassisBodyId,
             playerRacer.bike.rearWheelBodyId,
             playerRacer.bike.frontWheelBodyId,
-            aiRacer1.bike.rearWheelBodyId,
-            aiRacer1.bike.frontWheelBodyId,
+            aiRacers,
             cameraX,
             environment,
             groundRect,
