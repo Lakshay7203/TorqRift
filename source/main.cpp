@@ -384,7 +384,6 @@ void DrawUI(
     TTF_Font* stuntFont,
     bool levelComplete,
     float levelTime,
-    float airTime,
     const char* stuntText,
     float stuntTextTimer,
     const char* landingText,
@@ -395,7 +394,8 @@ void DrawUI(
     float bestTime,
     bool newBestTime,
     float boostMeter,
-    bool boostActive)
+    bool boostActive,
+    int playerRacePosition)
 {
     // =====================================================
     // TEXT DATA
@@ -426,16 +426,6 @@ void DrawUI(
         sizeof(scoreText),
         "SCORE  %d",
         score
-    );
-
-
-    char airTimeText[64];
-
-    SDL_snprintf(
-        airTimeText,
-        sizeof(airTimeText),
-        "AIR  %.2fs",
-        airTime
     );
 
 
@@ -481,232 +471,139 @@ void DrawUI(
 
 
     // =====================================================
-    // NORMAL GAME HUD
-    // =====================================================
+// NORMAL GAME HUD
+// =====================================================
 
     if (!levelComplete)
     {
-        // Enable transparency for HUD panels.
-
         SDL_SetRenderDrawBlendMode(
             renderer,
             SDL_BLENDMODE_BLEND
         );
 
 
-        // =================================================
-        // LEFT CONTROL PANEL
-        // =================================================
+        // =====================================================
+        // CLEAN TOP HUD
+        // =====================================================
 
-        SDL_FRect controlsPanel =
+        const float hudMargin = 20.0f;
+        const float topY = 16.0f;
+
+
+        // =====================================================
+        // TIMER - TOP LEFT
+        // =====================================================
+
+        const float timerPanelWidth = 175.0f;
+        const float timerPanelHeight = 54.0f;
+
+
+        SDL_FRect timerPanel =
         {
-            15.0f,
-            15.0f,
-            200.0f,
-            145.0f
+            hudMargin,
+            topY,
+            timerPanelWidth,
+            timerPanelHeight
         };
 
 
         SDL_SetRenderDrawColor(
             renderer,
-            20,
             30,
+            35,
             40,
-            150
+            220
         );
 
         SDL_RenderFillRect(
             renderer,
-            &controlsPanel
+            &timerPanel
         );
 
 
         SDL_SetRenderDrawColor(
             renderer,
-            255,
-            255,
-            255,
-            80
+            210,
+            210,
+            210,
+            220
         );
 
         SDL_RenderRect(
             renderer,
-            &controlsPanel
+            &timerPanel
         );
 
-
-        DrawText(
-            renderer,
-            font,
-            "W/S  DRIVE",
-            30.0f,
-            28.0f,
-            white
-        );
-
-
-        DrawText(
-            renderer,
-            font,
-            "A/D  LEAN",
-            30.0f,
-            58.0f,
-            white
-        );
-
-
-        DrawText(
-            renderer,
-            font,
-            "SPACE  HOP",
-            30.0f,
-            88.0f,
-            white
-        );
-
-
-        DrawText(
-            renderer,
-            font,
-            "R  RESET",
-            30.0f,
-            118.0f,
-            white
-        );
-
-
-        // =================================================
-        // RIGHT HUD PANEL
-        // =================================================
-
-        constexpr float hudPanelWidth =
-            300.0f;
-
-        constexpr float hudPanelHeight =
-            165.0f;
-
-        constexpr float hudPanelX =
-            SCREEN_WIDTH -
-            hudPanelWidth -
-            20.0f;
-
-        constexpr float hudPanelY =
-            15.0f;
-
-
-        SDL_FRect hudPanel =
-        {
-            hudPanelX,
-            hudPanelY,
-            hudPanelWidth,
-            hudPanelHeight
-        };
-
-
-        SDL_SetRenderDrawColor(
-            renderer,
-            20,
-            30,
-            40,
-            165
-        );
-
-        SDL_RenderFillRect(
-            renderer,
-            &hudPanel
-        );
-
-
-        SDL_SetRenderDrawColor(
-            renderer,
-            255,
-            255,
-            255,
-            80
-        );
-
-        SDL_RenderRect(
-            renderer,
-            &hudPanel
-        );
-
-
-        // -------------------------------------------------
-        // TIME
-        // -------------------------------------------------
 
         DrawText(
             renderer,
             font,
             timerText,
-            hudPanelX + 20.0f,
-            hudPanelY + 15.0f,
+            timerPanel.x + 14.0f,
+            timerPanel.y + 12.0f,
             white
         );
 
 
-        // -------------------------------------------------
-        // SCORE
-        // -------------------------------------------------
+        // =====================================================
+        // BOOST METER - TOP CENTER
+        // =====================================================
 
-        DrawText(
-            renderer,
-            font,
-            scoreText,
-            hudPanelX + 20.0f,
-            hudPanelY + 48.0f,
-            white
-        );
+        const float boostWidth = 260.0f;
+        const float boostHeight = 16.0f;
 
+        const float boostX =
+            SCREEN_WIDTH / 2.0f -
+            boostWidth / 2.0f;
 
-        // -------------------------------------------------
-        // BOOST LABEL
-        // -------------------------------------------------
-
-        DrawText(
-            renderer,
-            font,
-            boostText,
-            hudPanelX + 20.0f,
-            hudPanelY + 82.0f,
-            white
-        );
-
-
-        // =================================================
-        // BOOST BAR
-        // =================================================
-
-        constexpr float boostBarHeight =
-            22.0f;
-
-        const float boostBarX =
-            hudPanelX + 20.0f;
+        const float boostLabelY =
+            topY - 2.0f;
 
         const float boostBarY =
-            hudPanelY + 120.0f;
-
-        const float boostBarWidth =
-            hudPanelWidth - 40.0f;
+            topY + 34.0f;
 
 
-        // Background.
+        DrawText(
+            renderer,
+            font,
+            "BOOST",
+            SCREEN_WIDTH / 2.0f - 35.0f,
+            boostLabelY,
+            white
+        );
+
+
+        float boostPercent =
+            displayBoost /
+            100.0f;
+
+
+        if (boostPercent < 0.0f)
+        {
+            boostPercent = 0.0f;
+        }
+
+        if (boostPercent > 1.0f)
+        {
+            boostPercent = 1.0f;
+        }
+
 
         SDL_FRect boostBackground =
         {
-            boostBarX,
+            boostX,
             boostBarY,
-            boostBarWidth,
-            boostBarHeight
+            boostWidth,
+            boostHeight
         };
 
 
         SDL_SetRenderDrawColor(
             renderer,
-            35,
-            35,
-            35,
-            255
+            30,
+            30,
+            30,
+            230
         );
 
         SDL_RenderFillRect(
@@ -715,32 +612,25 @@ void DrawUI(
         );
 
 
-        // Calculate 0.0 -> 1.0.
-
-        float boostPercent =
-            displayBoost /
-            100.0f;
-
-
         SDL_FRect boostFill =
         {
-            boostBarX,
-            boostBarY,
-            boostBarWidth *
-                boostPercent,
-            boostBarHeight
+            boostX + 2.0f,
+            boostBarY + 2.0f,
+
+            (boostWidth - 4.0f) *
+            boostPercent,
+
+            boostHeight - 4.0f
         };
 
-
-        // Different visual when boost is active.
 
         if (boostActive)
         {
             SDL_SetRenderDrawColor(
                 renderer,
                 255,
-                210,
-                40,
+                225,
+                60,
                 255
             );
         }
@@ -748,9 +638,9 @@ void DrawUI(
         {
             SDL_SetRenderDrawColor(
                 renderer,
+                75,
+                170,
                 255,
-                165,
-                30,
                 255
             );
         }
@@ -762,13 +652,11 @@ void DrawUI(
         );
 
 
-        // Border.
-
         SDL_SetRenderDrawColor(
             renderer,
-            255,
-            255,
-            255,
+            210,
+            210,
+            210,
             255
         );
 
@@ -778,21 +666,64 @@ void DrawUI(
         );
 
 
-        // =================================================
-        // AIR TIME
-        // =================================================
+        // =====================================================
+        // SCORE - TOP RIGHT
+        // =====================================================
 
-        if (airTime > 0.0f)
+        const float scorePanelWidth = 150.0f;
+        const float scorePanelHeight = 54.0f;
+
+        const float scorePanelX =
+            SCREEN_WIDTH -
+            hudMargin -
+            scorePanelWidth;
+
+
+        SDL_FRect scorePanel =
         {
-            DrawText(
-                renderer,
-                stuntFont,
-                airTimeText,
-                SCREEN_WIDTH / 2.0f - 70.0f,
-                35.0f,
-                white
-            );
-        }
+            scorePanelX,
+            topY,
+            scorePanelWidth,
+            scorePanelHeight
+        };
+
+
+        SDL_SetRenderDrawColor(
+            renderer,
+            30,
+            35,
+            40,
+            220
+        );
+
+        SDL_RenderFillRect(
+            renderer,
+            &scorePanel
+        );
+
+
+        SDL_SetRenderDrawColor(
+            renderer,
+            210,
+            210,
+            210,
+            220
+        );
+
+        SDL_RenderRect(
+            renderer,
+            &scorePanel
+        );
+
+
+        DrawText(
+            renderer,
+            font,
+            scoreText,
+            scorePanelX + 18.0f,
+            topY + 12.0f,
+            white
+        );
     }
 
 
@@ -2636,7 +2567,6 @@ void Render(
         stuntFont,
         levelComplete,
         levelTime,
-        airTime,
         stuntText,
         stuntTextTimer,
         landingText,
@@ -2647,7 +2577,8 @@ void Render(
         bestTime,
         newBestTime,
         boostMeter,
-        boostActive
+        boostActive,
+        playerRacePosition
     );
 
     // =====================================================
