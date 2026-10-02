@@ -11,6 +11,8 @@
 #include <cmath>
 #include "ParticleSystem.h"
 #include "Environment.h"
+#include "AIController.h"
+#include "Racer.h"
 
 // ---------------------------------------------------------
 // CONSTANTS
@@ -382,7 +384,6 @@ void DrawUI(
     TTF_Font* stuntFont,
     bool levelComplete,
     float levelTime,
-    float airTime,
     const char* stuntText,
     float stuntTextTimer,
     const char* landingText,
@@ -393,7 +394,8 @@ void DrawUI(
     float bestTime,
     bool newBestTime,
     float boostMeter,
-    bool boostActive)
+    bool boostActive,
+    int playerRacePosition)
 {
     // =====================================================
     // TEXT DATA
@@ -424,16 +426,6 @@ void DrawUI(
         sizeof(scoreText),
         "SCORE  %d",
         score
-    );
-
-
-    char airTimeText[64];
-
-    SDL_snprintf(
-        airTimeText,
-        sizeof(airTimeText),
-        "AIR  %.2fs",
-        airTime
     );
 
 
@@ -479,232 +471,139 @@ void DrawUI(
 
 
     // =====================================================
-    // NORMAL GAME HUD
-    // =====================================================
+// NORMAL GAME HUD
+// =====================================================
 
     if (!levelComplete)
     {
-        // Enable transparency for HUD panels.
-
         SDL_SetRenderDrawBlendMode(
             renderer,
             SDL_BLENDMODE_BLEND
         );
 
 
-        // =================================================
-        // LEFT CONTROL PANEL
-        // =================================================
+        // =====================================================
+        // CLEAN TOP HUD
+        // =====================================================
 
-        SDL_FRect controlsPanel =
+        const float hudMargin = 20.0f;
+        const float topY = 16.0f;
+
+
+        // =====================================================
+        // TIMER - TOP LEFT
+        // =====================================================
+
+        const float timerPanelWidth = 175.0f;
+        const float timerPanelHeight = 54.0f;
+
+
+        SDL_FRect timerPanel =
         {
-            15.0f,
-            15.0f,
-            200.0f,
-            145.0f
+            hudMargin,
+            topY,
+            timerPanelWidth,
+            timerPanelHeight
         };
 
 
         SDL_SetRenderDrawColor(
             renderer,
-            20,
             30,
+            35,
             40,
-            150
+            220
         );
 
         SDL_RenderFillRect(
             renderer,
-            &controlsPanel
+            &timerPanel
         );
 
 
         SDL_SetRenderDrawColor(
             renderer,
-            255,
-            255,
-            255,
-            80
+            210,
+            210,
+            210,
+            220
         );
 
         SDL_RenderRect(
             renderer,
-            &controlsPanel
+            &timerPanel
         );
 
-
-        DrawText(
-            renderer,
-            font,
-            "W/S  DRIVE",
-            30.0f,
-            28.0f,
-            white
-        );
-
-
-        DrawText(
-            renderer,
-            font,
-            "A/D  LEAN",
-            30.0f,
-            58.0f,
-            white
-        );
-
-
-        DrawText(
-            renderer,
-            font,
-            "SPACE  HOP",
-            30.0f,
-            88.0f,
-            white
-        );
-
-
-        DrawText(
-            renderer,
-            font,
-            "R  RESET",
-            30.0f,
-            118.0f,
-            white
-        );
-
-
-        // =================================================
-        // RIGHT HUD PANEL
-        // =================================================
-
-        constexpr float hudPanelWidth =
-            300.0f;
-
-        constexpr float hudPanelHeight =
-            165.0f;
-
-        constexpr float hudPanelX =
-            SCREEN_WIDTH -
-            hudPanelWidth -
-            20.0f;
-
-        constexpr float hudPanelY =
-            15.0f;
-
-
-        SDL_FRect hudPanel =
-        {
-            hudPanelX,
-            hudPanelY,
-            hudPanelWidth,
-            hudPanelHeight
-        };
-
-
-        SDL_SetRenderDrawColor(
-            renderer,
-            20,
-            30,
-            40,
-            165
-        );
-
-        SDL_RenderFillRect(
-            renderer,
-            &hudPanel
-        );
-
-
-        SDL_SetRenderDrawColor(
-            renderer,
-            255,
-            255,
-            255,
-            80
-        );
-
-        SDL_RenderRect(
-            renderer,
-            &hudPanel
-        );
-
-
-        // -------------------------------------------------
-        // TIME
-        // -------------------------------------------------
 
         DrawText(
             renderer,
             font,
             timerText,
-            hudPanelX + 20.0f,
-            hudPanelY + 15.0f,
+            timerPanel.x + 14.0f,
+            timerPanel.y + 12.0f,
             white
         );
 
 
-        // -------------------------------------------------
-        // SCORE
-        // -------------------------------------------------
+        // =====================================================
+        // BOOST METER - TOP CENTER
+        // =====================================================
 
-        DrawText(
-            renderer,
-            font,
-            scoreText,
-            hudPanelX + 20.0f,
-            hudPanelY + 48.0f,
-            white
-        );
+        const float boostWidth = 260.0f;
+        const float boostHeight = 16.0f;
 
+        const float boostX =
+            SCREEN_WIDTH / 2.0f -
+            boostWidth / 2.0f;
 
-        // -------------------------------------------------
-        // BOOST LABEL
-        // -------------------------------------------------
-
-        DrawText(
-            renderer,
-            font,
-            boostText,
-            hudPanelX + 20.0f,
-            hudPanelY + 82.0f,
-            white
-        );
-
-
-        // =================================================
-        // BOOST BAR
-        // =================================================
-
-        constexpr float boostBarHeight =
-            22.0f;
-
-        const float boostBarX =
-            hudPanelX + 20.0f;
+        const float boostLabelY =
+            topY - 2.0f;
 
         const float boostBarY =
-            hudPanelY + 120.0f;
-
-        const float boostBarWidth =
-            hudPanelWidth - 40.0f;
+            topY + 34.0f;
 
 
-        // Background.
+        DrawText(
+            renderer,
+            font,
+            "BOOST",
+            SCREEN_WIDTH / 2.0f - 35.0f,
+            boostLabelY,
+            white
+        );
+
+
+        float boostPercent =
+            displayBoost /
+            100.0f;
+
+
+        if (boostPercent < 0.0f)
+        {
+            boostPercent = 0.0f;
+        }
+
+        if (boostPercent > 1.0f)
+        {
+            boostPercent = 1.0f;
+        }
+
 
         SDL_FRect boostBackground =
         {
-            boostBarX,
+            boostX,
             boostBarY,
-            boostBarWidth,
-            boostBarHeight
+            boostWidth,
+            boostHeight
         };
 
 
         SDL_SetRenderDrawColor(
             renderer,
-            35,
-            35,
-            35,
-            255
+            30,
+            30,
+            30,
+            230
         );
 
         SDL_RenderFillRect(
@@ -713,32 +612,25 @@ void DrawUI(
         );
 
 
-        // Calculate 0.0 -> 1.0.
-
-        float boostPercent =
-            displayBoost /
-            100.0f;
-
-
         SDL_FRect boostFill =
         {
-            boostBarX,
-            boostBarY,
-            boostBarWidth *
-                boostPercent,
-            boostBarHeight
+            boostX + 2.0f,
+            boostBarY + 2.0f,
+
+            (boostWidth - 4.0f) *
+            boostPercent,
+
+            boostHeight - 4.0f
         };
 
-
-        // Different visual when boost is active.
 
         if (boostActive)
         {
             SDL_SetRenderDrawColor(
                 renderer,
                 255,
-                210,
-                40,
+                225,
+                60,
                 255
             );
         }
@@ -746,9 +638,9 @@ void DrawUI(
         {
             SDL_SetRenderDrawColor(
                 renderer,
+                75,
+                170,
                 255,
-                165,
-                30,
                 255
             );
         }
@@ -760,13 +652,11 @@ void DrawUI(
         );
 
 
-        // Border.
-
         SDL_SetRenderDrawColor(
             renderer,
-            255,
-            255,
-            255,
+            210,
+            210,
+            210,
             255
         );
 
@@ -776,21 +666,64 @@ void DrawUI(
         );
 
 
-        // =================================================
-        // AIR TIME
-        // =================================================
+        // =====================================================
+        // SCORE - TOP RIGHT
+        // =====================================================
 
-        if (airTime > 0.0f)
+        const float scorePanelWidth = 150.0f;
+        const float scorePanelHeight = 54.0f;
+
+        const float scorePanelX =
+            SCREEN_WIDTH -
+            hudMargin -
+            scorePanelWidth;
+
+
+        SDL_FRect scorePanel =
         {
-            DrawText(
-                renderer,
-                stuntFont,
-                airTimeText,
-                SCREEN_WIDTH / 2.0f - 70.0f,
-                35.0f,
-                white
-            );
-        }
+            scorePanelX,
+            topY,
+            scorePanelWidth,
+            scorePanelHeight
+        };
+
+
+        SDL_SetRenderDrawColor(
+            renderer,
+            30,
+            35,
+            40,
+            220
+        );
+
+        SDL_RenderFillRect(
+            renderer,
+            &scorePanel
+        );
+
+
+        SDL_SetRenderDrawColor(
+            renderer,
+            210,
+            210,
+            210,
+            220
+        );
+
+        SDL_RenderRect(
+            renderer,
+            &scorePanel
+        );
+
+
+        DrawText(
+            renderer,
+            font,
+            scoreText,
+            scorePanelX + 18.0f,
+            topY + 12.0f,
+            white
+        );
     }
 
 
@@ -1222,7 +1155,7 @@ void DrawWheelSprite(
         PIXELS_PER_METER;
 
     // Compensates for transparent padding around our PNG.
-    constexpr float WHEEL_VISUAL_SCALE = 1.8f;
+    constexpr float WHEEL_VISUAL_SCALE = 1.55f;
 
     float wheelSize =
         physicsDiameter *
@@ -1257,15 +1190,14 @@ void DrawBikeSprite(
         57.2957795f;
 
     // Dimensions of our generated rider_chassis.png.
-    constexpr float ART_WIDTH = 1536.0f;
-    constexpr float ART_HEIGHT = 1024.0f;
+    constexpr float ART_WIDTH = 1448.0f;
+    constexpr float ART_HEIGHT = 1086.0f;
 
-    // Axle-hole positions inside the PNG.
-    constexpr float REAR_AXLE_X = 220.0f;
-    constexpr float REAR_AXLE_Y = 854.0f;
+    constexpr float REAR_AXLE_X = 249.0f;
+    constexpr float REAR_AXLE_Y = 889.0f;
 
-    constexpr float FRONT_AXLE_X = 1258.0f;
-    constexpr float FRONT_AXLE_Y = 913.0f;
+    constexpr float FRONT_AXLE_X = 1208.0f;
+    constexpr float FRONT_AXLE_Y = 946.0f;
 
     // -------------------------------------------------
     // DISTANCE BETWEEN PHYSICS WHEELS
@@ -1387,6 +1319,315 @@ void DrawBikeSprite(
     );
 }
 
+void DrawRacePositionBadge(
+    SDL_Renderer* renderer,
+    TTF_Font* font,
+    float centerX,
+    float centerY,
+    int position)
+{
+    if (position <= 0)
+    {
+        return;
+    }
+
+    // =====================================================
+    // BADGE DIMENSIONS
+    // =====================================================
+
+    constexpr float width = 66.0f;
+    constexpr float height = 48.0f;
+    constexpr float cornerCut = 9.0f;
+
+    constexpr float borderSize = 4.0f;
+
+    constexpr float pointerWidth = 18.0f;
+    constexpr float pointerHeight = 13.0f;
+
+
+    // =====================================================
+    // HELPER: DRAW ANGLED RECTANGLE
+    // =====================================================
+
+    auto DrawAngledBox =
+        [&](float x,
+            float y,
+            float w,
+            float h,
+            float cut,
+            SDL_FColor color)
+        {
+            SDL_Vertex vertices[9]{};
+
+            // Center vertex.
+            vertices[0].position =
+            {
+                x + w / 2.0f,
+                y + h / 2.0f
+            };
+
+            // Top-left angled point.
+            vertices[1].position =
+            {
+                x + cut,
+                y
+            };
+
+            // Top-right.
+            vertices[2].position =
+            {
+                x + w - cut,
+                y
+            };
+
+            vertices[3].position =
+            {
+                x + w,
+                y + cut
+            };
+
+            // Bottom-right.
+            vertices[4].position =
+            {
+                x + w,
+                y + h - cut
+            };
+
+            vertices[5].position =
+            {
+                x + w - cut,
+                y + h
+            };
+
+            // Bottom-left.
+            vertices[6].position =
+            {
+                x + cut,
+                y + h
+            };
+
+            vertices[7].position =
+            {
+                x,
+                y + h - cut
+            };
+
+            vertices[8].position =
+            {
+                x,
+                y + cut
+            };
+
+
+            for (SDL_Vertex& vertex : vertices)
+            {
+                vertex.color = color;
+            }
+
+
+            const int indices[] =
+            {
+                0, 1, 2,
+                0, 2, 3,
+                0, 3, 4,
+                0, 4, 5,
+                0, 5, 6,
+                0, 6, 7,
+                0, 7, 8,
+                0, 8, 1
+            };
+
+
+            SDL_RenderGeometry(
+                renderer,
+                nullptr,
+                vertices,
+                9,
+                indices,
+                24
+            );
+        };
+
+
+    // =====================================================
+    // OUTER DARK BORDER
+    // =====================================================
+
+    const float outerX =
+        centerX - width / 2.0f;
+
+    const float outerY =
+        centerY - height / 2.0f;
+
+
+    SDL_FColor darkColor =
+    {
+        20.0f / 255.0f,
+        25.0f / 255.0f,
+        30.0f / 255.0f,
+        1.0f
+    };
+
+
+    DrawAngledBox(
+        outerX,
+        outerY,
+        width,
+        height,
+        cornerCut,
+        darkColor
+    );
+
+
+    // =====================================================
+    // INNER WHITE BADGE
+    // =====================================================
+
+    SDL_FColor whiteColor =
+    {
+        245.0f / 255.0f,
+        245.0f / 255.0f,
+        245.0f / 255.0f,
+        1.0f
+    };
+
+
+    DrawAngledBox(
+        outerX + borderSize,
+        outerY + borderSize,
+        width - borderSize * 2.0f,
+        height - borderSize * 2.0f,
+        cornerCut - 2.0f,
+        whiteColor
+    );
+
+
+    // =====================================================
+    // POINTER BORDER
+    // =====================================================
+
+    SDL_Vertex pointerBorder[3]{};
+
+    pointerBorder[0].position =
+    {
+        centerX - pointerWidth / 2.0f - 3.0f,
+        outerY + height - 1.0f
+    };
+
+    pointerBorder[1].position =
+    {
+        centerX + pointerWidth / 2.0f + 3.0f,
+        outerY + height - 1.0f
+    };
+
+    pointerBorder[2].position =
+    {
+        centerX,
+        outerY + height +
+        pointerHeight + 4.0f
+    };
+
+
+    for (SDL_Vertex& vertex : pointerBorder)
+    {
+        vertex.color = darkColor;
+    }
+
+
+    const int triangleIndices[] =
+    {
+        0, 1, 2
+    };
+
+
+    SDL_RenderGeometry(
+        renderer,
+        nullptr,
+        pointerBorder,
+        3,
+        triangleIndices,
+        3
+    );
+
+
+    // =====================================================
+    // WHITE POINTER
+    // =====================================================
+
+    SDL_Vertex pointer[3]{};
+
+    pointer[0].position =
+    {
+        centerX - pointerWidth / 2.0f,
+        outerY + height - 1.0f
+    };
+
+    pointer[1].position =
+    {
+        centerX + pointerWidth / 2.0f,
+        outerY + height - 1.0f
+    };
+
+    pointer[2].position =
+    {
+        centerX,
+        outerY + height +
+        pointerHeight
+    };
+
+
+    for (SDL_Vertex& vertex : pointer)
+    {
+        vertex.color = whiteColor;
+    }
+
+
+    SDL_RenderGeometry(
+        renderer,
+        nullptr,
+        pointer,
+        3,
+        triangleIndices,
+        3
+    );
+
+
+    // =====================================================
+    // POSITION NUMBER
+    // =====================================================
+
+    char positionText[16];
+
+    SDL_snprintf(
+        positionText,
+        sizeof(positionText),
+        "%d",
+        position
+    );
+
+
+    SDL_Color numberColor =
+    {
+        20,
+        25,
+        30,
+        255
+    };
+
+
+    DrawText(
+        renderer,
+        font,
+        positionText,
+
+        centerX - 11.0f,
+        centerY - 24.0f,
+
+        numberColor
+    );
+}
+
+
 // ---------------------------------------------------------
 // RENDER
 // ---------------------------------------------------------
@@ -1400,6 +1641,7 @@ void Render(
     b2BodyId chassisBodyId,
     b2BodyId rearWheelBodyId,
     b2BodyId frontWheelBodyId,
+    const std::vector<Racer>& aiRacers,
     float cameraX,
     Environment& environment,
     const SDL_FRect& groundRect,
@@ -1421,6 +1663,7 @@ void Render(
     bool newBestTime,
     float boostMeter,
     bool boostActive,
+    int playerRacePosition,
     const ParticleSystem& particleSystem)
 
 {
@@ -1695,9 +1938,9 @@ void Render(
                 endScreen.y + thickness
             );
         }
-// =====================================================
-// NATURAL GRASS TUFTS
-// =====================================================
+            // =====================================================
+            // NATURAL GRASS TUFTS
+            // =====================================================
 
         float terrainDX =
             endScreen.x - startScreen.x;
@@ -1855,9 +2098,9 @@ void Render(
         );
     }
 
-// =====================================================
-// FINISH LINE
-// =====================================================
+        // =====================================================
+        // FINISH LINE
+        // =====================================================
 
     DrawFinishLine(
         renderer,
@@ -1870,9 +2113,9 @@ void Render(
         checkpointReached
     );
 
-    // =====================================================
-    // PARTICLE EFFECTS
-    // =====================================================
+        // =====================================================
+        // PARTICLE EFFECTS
+        // =====================================================
 
     particleSystem.Render(
         renderer,
@@ -1880,15 +2123,15 @@ void Render(
     );
 
 
-    // =====================================================
- // BIKE VISUALS
- // Chassis follows chassis physics.
- // Wheels follow wheel physics independently.
- // =====================================================
+        
+     // BIKE VISUALS
+     // Chassis follows chassis physics.
+     // Wheels follow wheel physics independently.
+     // =====================================================
 
- // -----------------------------------------------------
- // CHASSIS PHYSICS POSITION + ROTATION
- // -----------------------------------------------------
+     // -----------------------------------------------------
+     // CHASSIS PHYSICS POSITION + ROTATION
+     // -----------------------------------------------------
 
     b2Vec2 chassisPosition =
         b2Body_GetPosition(chassisBodyId);
@@ -2231,6 +2474,89 @@ void Render(
     );
 
     // =====================================================
+    // AI RACERS
+    // =====================================================
+
+    for (const Racer& aiRacer : aiRacers)
+    {
+        b2Vec2 aiRearWheelPosition =
+            b2Body_GetPosition(
+                aiRacer.bike.rearWheelBodyId
+            );
+
+        b2Vec2 aiFrontWheelPosition =
+            b2Body_GetPosition(
+                aiRacer.bike.frontWheelBodyId
+            );
+
+
+        SDL_FPoint aiRearWheelScreen;
+
+        aiRearWheelScreen.x =
+            CAMERA_TARGET_X +
+            (
+                aiRearWheelPosition.x -
+                cameraX
+                ) *
+            PIXELS_PER_METER;
+
+        aiRearWheelScreen.y =
+            SCREEN_CENTER_Y -
+            aiRearWheelPosition.y *
+            PIXELS_PER_METER;
+
+
+        SDL_FPoint aiFrontWheelScreen;
+
+        aiFrontWheelScreen.x =
+            CAMERA_TARGET_X +
+            (
+                aiFrontWheelPosition.x -
+                cameraX
+                ) *
+            PIXELS_PER_METER;
+
+        aiFrontWheelScreen.y =
+            SCREEN_CENTER_Y -
+            aiFrontWheelPosition.y *
+            PIXELS_PER_METER;
+
+
+        DrawBikeSprite(
+            renderer,
+            bikeTexture,
+            aiRearWheelScreen,
+            aiFrontWheelScreen
+        );
+
+
+        DrawWheelSprite(
+            renderer,
+            wheelTexture,
+            aiRacer.bike.rearWheelBodyId,
+            aiRearWheelScreen
+        );
+
+
+        DrawWheelSprite(
+            renderer,
+            wheelTexture,
+            aiRacer.bike.frontWheelBodyId,
+            aiFrontWheelScreen
+);
+
+
+        DrawRacePositionBadge(
+            renderer,
+            stuntFont,
+
+            chassisScreenX,
+            chassisScreenY - 120.0f,
+
+            playerRacePosition
+        );
+    }
+    // =====================================================
     // UI
     // =====================================================
 
@@ -2241,7 +2567,6 @@ void Render(
         stuntFont,
         levelComplete,
         levelTime,
-        airTime,
         stuntText,
         stuntTextTimer,
         landingText,
@@ -2252,7 +2577,8 @@ void Render(
         bestTime,
         newBestTime,
         boostMeter,
-        boostActive
+        boostActive,
+        playerRacePosition
     );
 
     // =====================================================
@@ -2428,9 +2754,72 @@ int main(int argc, char* argv[])
     Terrain terrain =
         CreateTerrain(worldId);
 
-    Bike bike =
-        CreateBike(worldId);
+    const b2Vec2 playerSpawnPosition =
+    {
+        0.0f,
+        -7.0f
+    };
 
+    const b2Vec2 aiSpawnPosition =
+    {
+        -3.0f,
+        -7.0f
+    };
+
+
+    Racer playerRacer;
+
+    playerRacer.isPlayer = true;
+
+    playerRacer.spawnPosition =
+    {
+        0.0f,
+        -7.0f
+    };
+
+    playerRacer.bike =
+        CreateBike(
+            worldId,
+            playerRacer.spawnPosition
+        );
+
+
+    // =====================================================
+    // AI RACERS
+    // =====================================================
+
+    std::vector<Racer> aiRacers;
+
+    aiRacers.reserve(3);
+
+
+    const b2Vec2 aiSpawnPositions[3] =
+    {
+        { -2.5f, -7.0f },
+        { -5.0f, -7.0f },
+        { -7.5f, -7.0f }
+    };
+
+
+    for (const b2Vec2& spawnPosition : aiSpawnPositions)
+    {
+        Racer aiRacer;
+
+        aiRacer.isPlayer = false;
+
+        aiRacer.spawnPosition =
+            spawnPosition;
+
+        aiRacer.bike =
+            CreateBike(
+                worldId,
+                aiRacer.spawnPosition
+            );
+
+        aiRacers.push_back(
+            aiRacer
+        );
+    }
 
     // =====================================================
     // PHYSICS SETTINGS
@@ -2456,8 +2845,6 @@ int main(int argc, char* argv[])
         SDL_GetTicksNS();
 
     InputState input;
-
-    bool bikeGrounded = true;
     
     bool levelComplete = false; 
 
@@ -2477,6 +2864,8 @@ int main(int argc, char* argv[])
     bool positiveFlipCompleted = false;
     bool negativeFlipCompleted = false;
     int flipCount = 0;
+
+    int nextFinishPlace = 1;
 
     ParticleSystem particleSystem;
 
@@ -2620,45 +3009,112 @@ int main(int argc, char* argv[])
         {
             if (levelComplete)
             {
+                // =============================================
+                // FULL NEW RACE
+                // =============================================
+
                 checkpointReached = false;
 
                 respawnPosition =
-                    b2Vec2{ 0.0f, -7.0f };
+                    playerRacer.spawnPosition;
 
                 levelTime = 0.0f;
 
-                // Full new run.
                 score = 0;
+
                 checkpointScore = 0;
+
+
+                ResetBike(
+                    playerRacer.bike,
+                    playerRacer.spawnPosition
+                );
+
+                for (Racer& aiRacer : aiRacers)
+                {
+                    ResetBike(
+                        aiRacer.bike,
+                        aiRacer.spawnPosition
+                    );
+                }
+
+
+                // =============================================
+                // RESET RACER STATE
+                // =============================================
+
+                playerRacer.finished = false;
+                playerRacer.finishPlace = 0;
+                playerRacer.currentPosition = 0;
+
+                for (Racer& aiRacer : aiRacers)
+                {
+                    aiRacer.finished = false;
+                    aiRacer.finishPlace = 0;
+                    aiRacer.currentPosition = 0;
+                    aiRacer.grounded = true;
+                }
+                nextFinishPlace = 1;
+
+
+                playerRacer.grounded = true;
+                
+
+                cameraX =
+                    playerRacer.spawnPosition.x;
+
+                levelComplete = false;
+            }
+            else
+            {
+                // =============================================
+                // NORMAL CRASH / CHECKPOINT RESPAWN
+                // =============================================
+
+                ResetBike(
+                    playerRacer.bike,
+                    respawnPosition
+                );
+
+                playerRacer.grounded = true;
+
+                cameraX =
+                    respawnPosition.x;
             }
 
-            ResetBike(
-                bike,
-                respawnPosition
-            );
 
-            cameraX = respawnPosition.x;
+            // Restore score from checkpoint.
+            score =
+                checkpointScore;
 
-            bikeGrounded = true;
-            levelComplete = false;
 
-            // Restore score from last checkpoint.
-            score = checkpointScore;
+            // Clear player stunt state.
+            airTime =
+                0.0f;
 
-            // Clear stunt state.
-            airTime = 0.0f;
-            wasBikeGrounded = true;
+            wasBikeGrounded =
+                true;
 
-            accumulatedRotation = 0.0f;
+            accumulatedRotation =
+                0.0f;
 
-            positiveFlipCompleted = false;
-            negativeFlipCompleted = false;
+            positiveFlipCompleted =
+                false;
 
-            stuntText[0] = '\0';
-            stuntTextTimer = 0.0f;
+            negativeFlipCompleted =
+                false;
 
-            landingText[0] = '\0';
-            landingTextTimer = 0.0f;
+            stuntText[0] =
+                '\0';
+
+            stuntTextTimer =
+                0.0f;
+
+            landingText[0] =
+                '\0';
+
+            landingTextTimer =
+                0.0f;
 
             particleSystem.Clear();
         }
@@ -2673,12 +3129,34 @@ int main(int argc, char* argv[])
         while (physicsAccumulator >= physicsTimeStep)
         {
             UpdateBikeControls(
-                bike,
+                playerRacer.bike,
                 input,
-                bikeGrounded,
-                levelComplete,
+                playerRacer.grounded,
+                playerRacer.finished,
                 boostActive
             );
+
+                
+               // AI CONTROLS
+                
+
+            for (Racer& aiRacer : aiRacers)
+            {
+                InputState aiInput =
+                    BuildAIInput(
+                        aiRacer.bike,
+                        aiRacer.grounded,
+                        aiRacer.finished
+                    );
+
+                UpdateBikeControls(
+                    aiRacer.bike,
+                    aiInput,
+                    aiRacer.grounded,
+                    aiRacer.finished,
+                    false
+                );
+            }
 
             // ---------------------------------------------
             // BUNNY HOP
@@ -2687,24 +3165,24 @@ int main(int argc, char* argv[])
             const float jumpVelocityChange = 3.5f;
 
             if (input.jumpPressed &&
-                bikeGrounded &&
-                !levelComplete)
+                playerRacer.grounded &&
+                !playerRacer.finished)
             {
                 // Get each body's mass.
                 const float chassisMass =
-                    b2Body_GetMass(bike.chassisBodyId);
+                    b2Body_GetMass(playerRacer.bike.chassisBodyId);
 
                 const float rearWheelMass =
-                    b2Body_GetMass(bike.rearWheelBodyId);
+                    b2Body_GetMass(playerRacer.bike.rearWheelBodyId);
 
                 const float frontWheelMass =
-                    b2Body_GetMass(bike.frontWheelBodyId);
+                    b2Body_GetMass(playerRacer.bike.frontWheelBodyId);
 
 
                 // Give every part of the bike the same
                 // upward velocity change.
                 b2Body_ApplyLinearImpulseToCenter(
-                    bike.chassisBodyId,
+                    playerRacer.bike.chassisBodyId,
                     b2Vec2{
                         0.0f,
                         chassisMass * jumpVelocityChange
@@ -2713,7 +3191,7 @@ int main(int argc, char* argv[])
                 );
 
                 b2Body_ApplyLinearImpulseToCenter(
-                    bike.rearWheelBodyId,
+                    playerRacer.bike.rearWheelBodyId,
                     b2Vec2{
                         0.0f,
                         rearWheelMass * jumpVelocityChange
@@ -2722,7 +3200,7 @@ int main(int argc, char* argv[])
                 );
 
                 b2Body_ApplyLinearImpulseToCenter(
-                    bike.frontWheelBodyId,
+                    playerRacer.bike.frontWheelBodyId,
                     b2Vec2{
                         0.0f,
                         frontWheelMass * jumpVelocityChange
@@ -2742,30 +3220,41 @@ int main(int argc, char* argv[])
                 subStepCount
             );
 
-            bikeGrounded =
-                IsBikeGrounded(bike);
 
+            playerRacer.grounded =
+                IsBikeGrounded(
+                    playerRacer.bike
+                );
+
+
+            for (Racer& aiRacer : aiRacers)
+            {
+                aiRacer.grounded =
+                    IsBikeGrounded(
+                        aiRacer.bike
+                    );
+            }
             // ---------------------------------------------
-// WHEELIE DETECTION
-// ---------------------------------------------
+            // WHEELIE DETECTION
+            // ---------------------------------------------
 
             bool rearWheelGrounded =
-                IsRearWheelGrounded(bike);
+                IsRearWheelGrounded(playerRacer.bike);
 
             bool frontWheelGrounded =
-                IsFrontWheelGrounded(bike);
+                IsFrontWheelGrounded(playerRacer.bike);
 
 
             b2Vec2 chassisVelocity =
                 b2Body_GetLinearVelocity(
-                    bike.chassisBodyId
+                    playerRacer.bike.chassisBodyId
                 );
 
 
             float currentChassisAngle =
                 b2Rot_GetAngle(
                     b2Body_GetRotation(
-                        bike.chassisBodyId
+                        playerRacer.bike.chassisBodyId
                     )
                 );
 
@@ -2830,7 +3319,7 @@ int main(int argc, char* argv[])
 
                     b2Vec2 rearWheelPosition =
                         b2Body_GetPosition(
-                            bike.rearWheelBodyId
+                            playerRacer.bike.rearWheelBodyId
                         );
 
                     particleSystem.SpawnWheelieDust(
@@ -2866,11 +3355,11 @@ int main(int argc, char* argv[])
 
             bool justLeftGround =
                 wasBikeGrounded &&
-                !bikeGrounded;
+                !playerRacer.grounded;
 
             bool justLanded =
                 !wasBikeGrounded &&
-                bikeGrounded;
+                playerRacer.grounded;
             if (justLeftGround)
             {
                 SDL_Log("LEFT GROUND");
@@ -2888,7 +3377,7 @@ int main(int argc, char* argv[])
             float currentBikeAngle =
                 b2Rot_GetAngle(
                     b2Body_GetRotation(
-                        bike.chassisBodyId
+                        playerRacer.bike.chassisBodyId
                     )
                 );
 
@@ -2902,7 +3391,7 @@ int main(int argc, char* argv[])
 
                 flipCount = 0;
             }
-            if (!bikeGrounded)
+            if (!playerRacer.grounded)
             {
                 float angleDifference =
                     currentBikeAngle -
@@ -2952,17 +3441,18 @@ int main(int argc, char* argv[])
             {
                 boostActive = true;
                 UpdateBikeControls(
-                bike,
-                input,
-                bikeGrounded,
-                levelComplete,
-                boostActive
-);
+                    playerRacer.bike,
+                    input,
+                    playerRacer.grounded,
+                    playerRacer.finished,
+                    boostActive
+                );
+
                 boostMeter = MAX_BOOST;
 
                 b2Vec2 rearWheelPosition =
                     b2Body_GetPosition(
-                        bike.rearWheelBodyId
+                        playerRacer.bike.rearWheelBodyId
                     );
 
                 particleSystem.SpawnBoostBurst(
@@ -2999,7 +3489,7 @@ int main(int argc, char* argv[])
             // AIR TIME
             // ---------------------------------------------
 
-            if (!bikeGrounded)
+            if (!playerRacer.grounded)
             {
                 airTime += physicsTimeStep;
             }
@@ -3026,7 +3516,7 @@ int main(int argc, char* argv[])
 
                     float landingAngularSpeed =
                         b2Body_GetAngularVelocity(
-                            bike.chassisBodyId
+                            playerRacer.bike.chassisBodyId
                         );
 
 
@@ -3245,61 +3735,80 @@ int main(int argc, char* argv[])
                     accumulatedRotation = 0.0f;
                 }
 
-            wasBikeGrounded = bikeGrounded;
+            wasBikeGrounded = playerRacer.grounded;
 
             if (levelComplete)
             {
                 SDL_SetWindowTitle(
                     window,
-                    "TrailTorque - LEVEL COMPLETE!"
+                    "TorqRift - LEVEL COMPLETE!"
                 );
             }
 
-            else if (bikeGrounded)
+            else if (playerRacer.grounded)
             {
                 SDL_SetWindowTitle(
                     window,
-                    "TrailTorque - GROUND"
+                    "TorqRift - GROUND"
                 );
             }
             else
             {
                 SDL_SetWindowTitle(
                     window,
-                    "TrailTorque - AIR"
+                    "TorqRift - AIR"
                 );
             
             }
 
             LimitBikeAngularSpeed(
-                bike,
-                bikeGrounded
+                playerRacer.bike,
+                playerRacer.grounded
             );
+
+
+            for (Racer& aiRacer : aiRacers)
+            {
+                LimitBikeAngularSpeed(
+                    aiRacer.bike,
+                    aiRacer.grounded
+                );
+            }
 
 
             physicsAccumulator -= physicsTimeStep;
         }
+        
 
-
-        // =================================================
-        // READ CURRENT BOX2D POSITIONS
-        // IMPORTANT: these must update EVERY FRAME.
-        // =================================================
-
-        b2Vec2 chassisPosition =
+        b2Vec2 playerPosition =
             b2Body_GetPosition(
-                bike.chassisBodyId
+                playerRacer.bike.chassisBodyId
             );
 
+
         environment.Update(
-            chassisPosition.x,
+            playerPosition.x,
             deltaTime
         );
 
-        if (!levelComplete &&
-            chassisPosition.x >= FINISH_X)
+        // =================================================
+        // FINISH ORDER
+        // =================================================
+
+        if (!playerRacer.finished &&
+            playerPosition.x >= FINISH_X)
         {
+            playerRacer.finished = true;
+
+            playerRacer.finishPlace =
+                nextFinishPlace;
+
+            ++nextFinishPlace;
+
+
+            // Keep existing UI working for now.
             levelComplete = true;
+
 
             newBestTime = false;
 
@@ -3311,8 +3820,33 @@ int main(int argc, char* argv[])
             }
         }
 
+
+        // =================================================
+        // AI FINISH ORDER
+        // =================================================
+
+        for (Racer& aiRacer : aiRacers)
+        {
+            b2Vec2 aiPosition =
+                b2Body_GetPosition(
+                    aiRacer.bike.chassisBodyId
+                );
+
+
+            if (!aiRacer.finished &&
+                aiPosition.x >= FINISH_X)
+            {
+                aiRacer.finished = true;
+
+                aiRacer.finishPlace =
+                    nextFinishPlace;
+
+                ++nextFinishPlace;
+            }
+        }
+
         if (!checkpointReached &&
-            chassisPosition.x >= CHECKPOINT_X)
+            playerPosition.x >= CHECKPOINT_X)
         {
             checkpointReached = true;
 
@@ -3322,24 +3856,133 @@ int main(int argc, char* argv[])
             checkpointScore = score;
         }
 
+        // =================================================
+        // LIVE RACE POSITION
+        // =================================================
+
+        // -------------------------------------------------
+        // PLAYER POSITION
+        // -------------------------------------------------
+
+        if (playerRacer.finished)
+        {
+            playerRacer.currentPosition =
+                playerRacer.finishPlace;
+        }
+        else
+        {
+            int position = 1;
+
+            for (Racer& aiRacer : aiRacers)
+            {
+                b2Vec2 aiPosition =
+                    b2Body_GetPosition(
+                        aiRacer.bike.chassisBodyId
+                    );
+
+                // A finished racer is automatically ahead.
+                // Otherwise compare track progress.
+                if (aiRacer.finished ||
+                    aiPosition.x > playerPosition.x)
+                {
+                    ++position;
+                }
+            }
+
+            playerRacer.currentPosition =
+                position;
+        }
+
+
+        // -------------------------------------------------
+        // AI POSITIONS
+        // -------------------------------------------------
+
+        for (size_t i = 0; i < aiRacers.size(); ++i)
+        {
+            Racer& aiRacer =
+                aiRacers[i];
+
+
+            if (aiRacer.finished)
+            {
+                aiRacer.currentPosition =
+                    aiRacer.finishPlace;
+
+                continue;
+            }
+
+
+            b2Vec2 aiPosition =
+                b2Body_GetPosition(
+                    aiRacer.bike.chassisBodyId
+                );
+
+
+            int position = 1;
+
+
+            // Is the player ahead of this AI?
+            if (playerRacer.finished ||
+                playerPosition.x > aiPosition.x)
+            {
+                ++position;
+            }
+
+
+            // Compare against every other AI racer.
+            for (size_t j = 0;
+                j < aiRacers.size();
+                ++j)
+            {
+                // Don't compare a racer against itself.
+                if (i == j)
+                {
+                    continue;
+                }
+
+
+                Racer& otherAI =
+                    aiRacers[j];
+
+
+                b2Vec2 otherPosition =
+                    b2Body_GetPosition(
+                        otherAI.bike.chassisBodyId
+                    );
+
+
+                if (otherAI.finished ||
+                    otherPosition.x > aiPosition.x)
+                {
+                    ++position;
+                }
+            }
+
+
+            aiRacer.currentPosition =
+                position;
+        }
+
+
         // Camera gradually catches up to the bike.
         const float cameraFollowSpeed = 3.0f;
 
         cameraX +=
-            (chassisPosition.x - cameraX) *
+            (playerPosition.x - cameraX) *
             cameraFollowSpeed *
             deltaTime;
      
 
         b2Vec2 rearWheelPosition =
             b2Body_GetPosition(
-                bike.rearWheelBodyId
+                playerRacer.bike.rearWheelBodyId
             );
 
 
         b2Vec2 frontWheelPosition =
             b2Body_GetPosition(
-                bike.frontWheelBodyId
+                playerRacer.bike.frontWheelBodyId
             );
 
 
@@ -3432,9 +4075,10 @@ int main(int argc, char* argv[])
             stuntFont,
             bikeTexture,
             wheelTexture,
-            bike.chassisBodyId,
-            bike.rearWheelBodyId,
-            bike.frontWheelBodyId,
+            playerRacer.bike.chassisBodyId,
+            playerRacer.bike.rearWheelBodyId,
+            playerRacer.bike.frontWheelBodyId,
+            aiRacers,
             cameraX,
             environment,
             groundRect,
@@ -3456,6 +4100,7 @@ int main(int argc, char* argv[])
             newBestTime,
             boostMeter,
             boostActive,
+            playerRacer.currentPosition,
             particleSystem
         );
     }
