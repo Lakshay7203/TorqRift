@@ -2588,6 +2588,59 @@ void Render(
     SDL_RenderPresent(renderer);
 }
 
+void ApplyBunnyHop(
+    const Bike& bike,
+    float jumpVelocityChange)
+{
+    const float chassisMass =
+        b2Body_GetMass(
+            bike.chassisBodyId
+        );
+
+    const float rearWheelMass =
+        b2Body_GetMass(
+            bike.rearWheelBodyId
+        );
+
+    const float frontWheelMass =
+        b2Body_GetMass(
+            bike.frontWheelBodyId
+        );
+
+
+    b2Body_ApplyLinearImpulseToCenter(
+        bike.chassisBodyId,
+        {
+            0.0f,
+            chassisMass *
+            jumpVelocityChange
+        },
+        true
+    );
+
+    b2Body_ApplyLinearImpulseToCenter(
+        bike.rearWheelBodyId,
+        {
+            0.0f,
+            rearWheelMass *
+            jumpVelocityChange
+        },
+        true
+    );
+
+    b2Body_ApplyLinearImpulseToCenter(
+        bike.frontWheelBodyId,
+        {
+            0.0f,
+            frontWheelMass *
+            jumpVelocityChange
+        },
+        true
+    );
+}
+
+
+
 
 // ---------------------------------------------------------
 // MAIN
@@ -2784,20 +2837,15 @@ int main(int argc, char* argv[])
         );
 
 
-    // =====================================================
-    // AI RACERS
-    // =====================================================
-
     std::vector<Racer> aiRacers;
 
     aiRacers.reserve(3);
 
-
     const b2Vec2 aiSpawnPositions[3] =
     {
-        { -2.5f, -7.0f },
-        { -5.0f, -7.0f },
-        { -7.5f, -7.0f }
+        { -1.8f, -7.0f },
+        { -3.6f, -7.0f },
+        { -5.4f, -7.0f }
     };
 
 
@@ -2821,6 +2869,16 @@ int main(int argc, char* argv[])
         );
     }
 
+
+    // =====================================================
+    // AI STATES
+    // =====================================================
+
+    std::vector<AIState> aiStates(
+        aiRacers.size()
+    );
+
+
     // =====================================================
     // PHYSICS SETTINGS
     // =====================================================
@@ -2828,9 +2886,11 @@ int main(int argc, char* argv[])
     const float physicsTimeStep =
         1.0f / 60.0f;
 
-    const int subStepCount = 4;
+    const int subStepCount =
+        4;
 
-    float physicsAccumulator = 0.0f;
+    float physicsAccumulator =
+        0.0f;
 
 
     // =====================================================
@@ -3038,7 +3098,6 @@ int main(int argc, char* argv[])
                     );
                 }
 
-
                 // =============================================
                 // RESET RACER STATE
                 // =============================================
@@ -3055,6 +3114,11 @@ int main(int argc, char* argv[])
                     aiRacer.grounded = true;
                 }
                 nextFinishPlace = 1;
+
+                for (AIState& aiState : aiStates)
+                {
+                    aiState = AIState{};
+                }
 
 
                 playerRacer.grounded = true;
@@ -3136,25 +3200,66 @@ int main(int argc, char* argv[])
                 boostActive
             );
 
+            
                 
-               // AI CONTROLS
-                
+            // =====================================================
+            // AI CONTROLS
+            // =====================================================
 
-            for (Racer& aiRacer : aiRacers)
+            for (size_t i = 0;
+                i < aiRacers.size();
+                ++i)
             {
+                Racer& aiRacer =
+                    aiRacers[i];
+
+                AIState& aiState =
+                    aiStates[i];
+
+                AIProfile profile =
+                    GetAIProfile(
+                        static_cast<int>(i)
+                    );
+
+
                 InputState aiInput =
                     BuildAIInput(
                         aiRacer.bike,
                         aiRacer.grounded,
-                        aiRacer.finished
+                        aiRacer.finished,
+                        static_cast<int>(i),
+                        physicsTimeStep,
+                        aiState,
+                        terrain.segments
                     );
+
+
+                // =============================================
+                // TERRAIN-AWARE BUNNY HOP
+                // =============================================
+
+                if (aiInput.jumpPressed &&
+                    aiRacer.grounded)
+                {
+                    ApplyBunnyHop(
+                        aiRacer.bike,
+                        profile.jumpStrength
+                    );
+                }
+
+
+                // =============================================
+                // DRIVE / STUNT / REAL EARNED BOOST
+                // =============================================
 
                 UpdateBikeControls(
                     aiRacer.bike,
                     aiInput,
                     aiRacer.grounded,
                     aiRacer.finished,
-                    false
+                    aiState.boostActive,
+                    profile.speedMultiplier,
+                    profile.airControlMultiplier
                 );
             }
 
@@ -3162,52 +3267,15 @@ int main(int argc, char* argv[])
             // BUNNY HOP
             // ---------------------------------------------
 
-            const float jumpVelocityChange = 3.5f;
 
             if (input.jumpPressed &&
                 playerRacer.grounded &&
                 !playerRacer.finished)
             {
-                // Get each body's mass.
-                const float chassisMass =
-                    b2Body_GetMass(playerRacer.bike.chassisBodyId);
-
-                const float rearWheelMass =
-                    b2Body_GetMass(playerRacer.bike.rearWheelBodyId);
-
-                const float frontWheelMass =
-                    b2Body_GetMass(playerRacer.bike.frontWheelBodyId);
-
-
-                // Give every part of the bike the same
-                // upward velocity change.
-                b2Body_ApplyLinearImpulseToCenter(
-                    playerRacer.bike.chassisBodyId,
-                    b2Vec2{
-                        0.0f,
-                        chassisMass * jumpVelocityChange
-                    },
-                    true
+                ApplyBunnyHop(
+                    playerRacer.bike,
+                    3.5f
                 );
-
-                b2Body_ApplyLinearImpulseToCenter(
-                    playerRacer.bike.rearWheelBodyId,
-                    b2Vec2{
-                        0.0f,
-                        rearWheelMass * jumpVelocityChange
-                    },
-                    true
-                );
-
-                b2Body_ApplyLinearImpulseToCenter(
-                    playerRacer.bike.frontWheelBodyId,
-                    b2Vec2{
-                        0.0f,
-                        frontWheelMass * jumpVelocityChange
-                    },
-                    true
-                );
-
             }
 
             // ---------------------------------------------
@@ -3227,13 +3295,36 @@ int main(int argc, char* argv[])
                 );
 
 
-            for (Racer& aiRacer : aiRacers)
+            for (size_t i = 0;
+                i < aiRacers.size();
+                ++i)
             {
+                Racer& aiRacer =
+                    aiRacers[i];
+
+                AIState& aiState =
+                    aiStates[i];
+
+                AIProfile profile =
+                    GetAIProfile(
+                        static_cast<int>(i)
+                    );
+
+
                 aiRacer.grounded =
                     IsBikeGrounded(
                         aiRacer.bike
                     );
+
+
+                ApplyAIStabilityAssist(
+                    aiRacer.bike,
+                    aiRacer.grounded,
+                    profile,
+                    aiState
+                );
             }
+            
             // ---------------------------------------------
             // WHEELIE DETECTION
             // ---------------------------------------------
@@ -3362,6 +3453,7 @@ int main(int argc, char* argv[])
                 playerRacer.grounded;
             if (justLeftGround)
             {
+
                 SDL_Log("LEFT GROUND");
             }
 

@@ -41,7 +41,9 @@ void UpdateBikeControls(
     const InputState& input,
     bool bikeGrounded,
     bool levelComplete,
-    bool boostActive
+    bool boostActive,
+    float speedMultiplier = 1.0f,
+    float airControlMultiplier = 1.0f
 );
 
 void LimitBikeAngularSpeed(
