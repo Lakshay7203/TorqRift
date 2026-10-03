@@ -401,17 +401,21 @@ void UpdateBikeControls(
     const InputState& input,
     bool bikeGrounded,
     bool levelComplete,
-    bool boostActive)
+    bool boostActive,
+    float speedMultiplier,
+    float airControlMultiplier)
 {
     // ---------------------------------------------
-// DRIVE
-// ---------------------------------------------
+    // DRIVE
+    // ---------------------------------------------
 
     const float normalMotorSpeed =
-        20.0f;
+        20.0f *
+        speedMultiplier;
 
     const float boostedMotorSpeed =
-        30.0f;
+        30.0f *
+        speedMultiplier;
 
 
     float currentMotorSpeed;
@@ -507,7 +511,9 @@ void UpdateBikeControls(
     }
     else
     {
-        const float airTorque = 20.0f;
+        const float airTorque =
+            20.0f *
+            airControlMultiplier;
 
         if (input.leanBackward &&
             !input.leanForward)
