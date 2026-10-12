@@ -1691,6 +1691,7 @@ void Render(
     SDL_Renderer* renderer,
     TTF_Font* font,
     TTF_Font* stuntFont,
+    TTF_Font* countdownFont,
     SDL_Texture* bikeTexture,
     SDL_Texture* wheelTexture,
     b2BodyId chassisBodyId,
@@ -1720,7 +1721,9 @@ void Render(
     float boostMeter,
     bool boostActive,
     int playerRacePosition,
-    const ParticleSystem& particleSystem)
+    const ParticleSystem& particleSystem,
+    float countdownTimer,
+    bool raceStarted)
 
 {
 
@@ -2676,6 +2679,56 @@ void Render(
         playerRacePosition
     );
 
+
+    // ============================================
+    // RACE START COUNTDOWN
+    // ============================================
+
+    const char* countdownText = nullptr;
+
+    if (!raceStarted)
+    {
+        if (countdownTimer > 2.0f)
+            countdownText = "3";
+        else if (countdownTimer > 1.0f)
+            countdownText = "2";
+        else
+            countdownText = "1";
+    }
+    else if (!levelComplete && levelTime < 0.7f)
+    {
+        countdownText = "GO!";
+    }
+
+    if (countdownText)
+    {
+        int textWidth = 0;
+        int textHeight = 0;
+
+        if (TTF_GetStringSize(
+            stuntFont,
+            countdownText,
+            0,
+            &textWidth,
+            &textHeight))
+        {
+            SDL_Color countdownColor =
+                raceStarted
+                ? SDL_Color{ 80, 255, 130, 255 }
+            : SDL_Color{ 255, 220, 70, 255 };
+
+            DrawText(
+                renderer,
+                countdownFont,
+                countdownText,
+                (SCREEN_WIDTH - textWidth) / 2.0f,
+                (SCREEN_HEIGHT - textHeight) / 2.0f,
+                countdownColor
+            );
+        }
+    }
+
+
     // =====================================================
     // PRESENT
     // =====================================================
@@ -3141,6 +3194,16 @@ int main(int argc, char* argv[])
             "assets/Fonts/Bangers-Regular.ttf",
             48.0f
         );
+
+    TTF_Font* countdownFont = TTF_OpenFont(
+        "assets/Fonts/Bangers-Regular.ttf",
+        110.0f
+    );
+
+    if (!countdownFont)
+    {
+        SDL_Log("Countdown font failed: %s", SDL_GetError());
+    }
         
 
     if (!font)
@@ -3284,6 +3347,10 @@ int main(int argc, char* argv[])
 
     float levelTime = 0.0f;
 
+    // Race start countdown
+    float countdownTimer = 3.0f;
+    bool raceStarted = false;
+
     float airTime = 0.0f;
     bool wasBikeGrounded = true;
 
@@ -3421,7 +3488,20 @@ int main(int argc, char* argv[])
         // LEVEL TIMER
         // ---------------------------------------------
 
-        if (!levelComplete)
+        // Countdown before the race
+        if (!raceStarted)
+        {
+            countdownTimer -= deltaTime;
+
+            if (countdownTimer <= 0.0f)
+            {
+                countdownTimer = 0.0f;
+                raceStarted = true;
+            }
+        }
+
+        // Race timer starts only after GO
+        if (raceStarted && !levelComplete)
         {
             levelTime += deltaTime;
         }
@@ -3451,6 +3531,9 @@ int main(int argc, char* argv[])
                     playerRacer.spawnPosition;
 
                 levelTime = 0.0f;
+
+                countdownTimer = 3.0f;
+                raceStarted = false;
 
                 score = 0;
 
@@ -3564,13 +3647,18 @@ int main(int argc, char* argv[])
 
         while (physicsAccumulator >= physicsTimeStep)
         {
+
+            InputState raceInput =
+                raceStarted ? input : InputState{};
+
             UpdateBikeControls(
                 playerRacer.bike,
-                input,
+                raceInput,
                 playerRacer.grounded,
                 playerRacer.finished,
                 boostActive
             );
+
 
             
                 
@@ -3594,8 +3682,12 @@ int main(int argc, char* argv[])
                     );
 
 
-                InputState aiInput =
-                    BuildAIInput(
+
+                InputState aiInput{};
+
+                if (raceStarted)
+                {
+                    aiInput = BuildAIInput(
                         aiRacer.bike,
                         aiRacer.grounded,
                         aiRacer.finished,
@@ -3604,6 +3696,8 @@ int main(int argc, char* argv[])
                         aiState,
                         terrain.segments
                     );
+                }
+
 
 
                 // =============================================
@@ -3640,7 +3734,8 @@ int main(int argc, char* argv[])
             // ---------------------------------------------
 
 
-            if (input.jumpPressed &&
+            if (raceStarted &&
+                raceInput.jumpPressed &&
                 playerRacer.grounded &&
                 !playerRacer.finished)
             {
@@ -4537,6 +4632,7 @@ int main(int argc, char* argv[])
             renderer,
             font,
             stuntFont,
+            countdownFont,
             bikeTexture,
             wheelTexture,
             playerRacer.bike.chassisBodyId,
@@ -4566,7 +4662,9 @@ int main(int argc, char* argv[])
             boostMeter,
             boostActive,
             playerRacer.currentPosition,
-            particleSystem
+            particleSystem,
+            countdownTimer,
+            raceStarted
         );
     }
 
@@ -4620,6 +4718,8 @@ int main(int argc, char* argv[])
     TTF_CloseFont(
         font
     );
+
+    TTF_CloseFont(countdownFont);
 
     TTF_Quit();
     SDL_Quit();
