@@ -13,6 +13,7 @@
 #include "Environment.h"
 #include "AIController.h"
 #include "Racer.h"
+#include <string>
 
 // ---------------------------------------------------------
 // CONSTANTS
@@ -1180,28 +1181,36 @@ void DrawWheelSprite(
     );
 }
 
+struct RacerVisual
+{
+    SDL_Texture* bikeTexture = nullptr;
+    SDL_Texture* wheelTexture = nullptr;
+
+    float artWidth = 0.0f;
+    float artHeight = 0.0f;
+
+    float rearAxleX = 0.0f;
+    float rearAxleY = 0.0f;
+
+    float frontAxleX = 0.0f;
+    float frontAxleY = 0.0f;
+
+    const char* name = "";
+};
+
 void DrawBikeSprite(
     SDL_Renderer* renderer,
-    SDL_Texture* bikeTexture,
+    const RacerVisual& visual,
     const SDL_FPoint& rearWheelScreen,
     const SDL_FPoint& frontWheelScreen)
 {
     constexpr float RAD_TO_DEG =
         57.2957795f;
 
-    // Dimensions of our generated rider_chassis.png.
-    constexpr float ART_WIDTH = 1448.0f;
-    constexpr float ART_HEIGHT = 1086.0f;
 
-    constexpr float REAR_AXLE_X = 249.0f;
-    constexpr float REAR_AXLE_Y = 889.0f;
-
-    constexpr float FRONT_AXLE_X = 1208.0f;
-    constexpr float FRONT_AXLE_Y = 946.0f;
-
-    // -------------------------------------------------
-    // DISTANCE BETWEEN PHYSICS WHEELS
-    // -------------------------------------------------
+    // =====================================================
+    // PHYSICS WHEEL DISTANCE
+    // =====================================================
 
     float screenDX =
         frontWheelScreen.x -
@@ -1211,23 +1220,26 @@ void DrawBikeSprite(
         frontWheelScreen.y -
         rearWheelScreen.y;
 
+
     float screenWheelDistance =
         std::sqrt(
             screenDX * screenDX +
             screenDY * screenDY
         );
 
-    // -------------------------------------------------
-    // DISTANCE BETWEEN AXLE HOLES IN ARTWORK
-    // -------------------------------------------------
+
+    // =====================================================
+    // ARTWORK AXLE DISTANCE
+    // =====================================================
 
     float artDX =
-        FRONT_AXLE_X -
-        REAR_AXLE_X;
+        visual.frontAxleX -
+        visual.rearAxleX;
 
     float artDY =
-        FRONT_AXLE_Y -
-        REAR_AXLE_Y;
+        visual.frontAxleY -
+        visual.rearAxleY;
+
 
     float artWheelDistance =
         std::sqrt(
@@ -1235,50 +1247,83 @@ void DrawBikeSprite(
             artDY * artDY
         );
 
+
+    if (artWheelDistance <= 0.001f)
+    {
+        return;
+    }
+
+
     float scale =
         screenWheelDistance /
         artWheelDistance;
 
-    // -------------------------------------------------
-    // SIZE THE COMPLETE RIDER SPRITE
-    // -------------------------------------------------
+
+    // =====================================================
+    // SIZE IMAGE
+    // =====================================================
 
     SDL_FRect bikeRect;
 
     bikeRect.w =
-        ART_WIDTH * scale;
+        visual.artWidth *
+        scale;
 
     bikeRect.h =
-        ART_HEIGHT * scale;
+        visual.artHeight *
+        scale;
 
-    // -------------------------------------------------
-    // MIDPOINT BETWEEN THE TWO AXLES
-    // -------------------------------------------------
+
+    // =====================================================
+    // ART AXLE MIDPOINT
+    // =====================================================
 
     float artMidX =
-        (REAR_AXLE_X + FRONT_AXLE_X)
-        / 2.0f;
+        (
+            visual.rearAxleX +
+            visual.frontAxleX
+            ) /
+        2.0f;
+
 
     float artMidY =
-        (REAR_AXLE_Y + FRONT_AXLE_Y)
-        / 2.0f;
+        (
+            visual.rearAxleY +
+            visual.frontAxleY
+            ) /
+        2.0f;
+
+
+    // =====================================================
+    // PHYSICS WHEEL MIDPOINT
+    // =====================================================
 
     float screenMidX =
-        (rearWheelScreen.x +
-            frontWheelScreen.x)
-        / 2.0f;
+        (
+            rearWheelScreen.x +
+            frontWheelScreen.x
+            ) /
+        2.0f;
+
 
     float screenMidY =
-        (rearWheelScreen.y +
-            frontWheelScreen.y)
-        / 2.0f;
+        (
+            rearWheelScreen.y +
+            frontWheelScreen.y
+            ) /
+        2.0f;
 
-    // Pivot inside destination rectangle.
+
+    // =====================================================
+    // ROTATION PIVOT
+    // =====================================================
+
     SDL_FPoint pivot =
     {
         artMidX * scale,
         artMidY * scale
     };
+
 
     bikeRect.x =
         screenMidX -
@@ -1288,29 +1333,39 @@ void DrawBikeSprite(
         screenMidY -
         pivot.y;
 
-    // -------------------------------------------------
-    // MATCH ART ANGLE TO PHYSICS WHEEL ANGLE
-    // -------------------------------------------------
+
+    // =====================================================
+    // MATCH ART ANGLE TO PHYSICS
+    // =====================================================
 
     float screenAngle =
         std::atan2(
             screenDY,
             screenDX
-        ) * RAD_TO_DEG;
+        ) *
+        RAD_TO_DEG;
+
 
     float artAngle =
         std::atan2(
             artDY,
             artDX
-        ) * RAD_TO_DEG;
+        ) *
+        RAD_TO_DEG;
+
 
     float finalAngle =
         screenAngle -
         artAngle;
 
+
+    // =====================================================
+    // DRAW
+    // =====================================================
+
     SDL_RenderTextureRotated(
         renderer,
-        bikeTexture,
+        visual.bikeTexture,
         nullptr,
         &bikeRect,
         finalAngle,
@@ -1642,6 +1697,7 @@ void Render(
     b2BodyId rearWheelBodyId,
     b2BodyId frontWheelBodyId,
     const std::vector<Racer>& aiRacers,
+    const std::vector<RacerVisual>& aiVisuals,
     float cameraX,
     Environment& environment,
     const SDL_FRect& groundRect,
@@ -2477,18 +2533,36 @@ void Render(
     // AI RACERS
     // =====================================================
 
-    for (const Racer& aiRacer : aiRacers)
+    for (size_t i = 0;
+        i < aiRacers.size();
+        ++i)
     {
+        const Racer& aiRacer =
+            aiRacers[i];
+
+        const RacerVisual& visual =
+            aiVisuals[i];
+
+
+        // =================================================
+        // AI WHEEL PHYSICS POSITIONS
+        // =================================================
+
         b2Vec2 aiRearWheelPosition =
             b2Body_GetPosition(
                 aiRacer.bike.rearWheelBodyId
             );
+
 
         b2Vec2 aiFrontWheelPosition =
             b2Body_GetPosition(
                 aiRacer.bike.frontWheelBodyId
             );
 
+
+        // =================================================
+        // REAR WHEEL -> SCREEN
+        // =================================================
 
         SDL_FPoint aiRearWheelScreen;
 
@@ -2506,6 +2580,10 @@ void Render(
             PIXELS_PER_METER;
 
 
+        // =================================================
+        // FRONT WHEEL -> SCREEN
+        // =================================================
+
         SDL_FPoint aiFrontWheelScreen;
 
         aiFrontWheelScreen.x =
@@ -2522,40 +2600,57 @@ void Render(
             PIXELS_PER_METER;
 
 
+        // =================================================
+        // BIKE / RIDER BODY
+        // =================================================
+
         DrawBikeSprite(
             renderer,
-            bikeTexture,
+            visual,
             aiRearWheelScreen,
             aiFrontWheelScreen
         );
 
 
+        // =================================================
+        // REAR WHEEL
+        // =================================================
+
         DrawWheelSprite(
             renderer,
-            wheelTexture,
+            visual.wheelTexture,
             aiRacer.bike.rearWheelBodyId,
             aiRearWheelScreen
         );
 
 
+        // =================================================
+        // FRONT WHEEL
+        // =================================================
+
         DrawWheelSprite(
             renderer,
-            wheelTexture,
+            visual.wheelTexture,
             aiRacer.bike.frontWheelBodyId,
             aiFrontWheelScreen
-);
-
-
-        DrawRacePositionBadge(
-            renderer,
-            stuntFont,
-
-            chassisScreenX,
-            chassisScreenY - 120.0f,
-
-            playerRacePosition
         );
     }
+
+
+    // =====================================================
+    // PLAYER POSITION BADGE
+    // =====================================================
+
+    DrawRacePositionBadge(
+        renderer,
+        stuntFont,
+
+        chassisScreenX,
+        chassisScreenY - 120.0f,
+
+        playerRacePosition
+    );
+
     // =====================================================
     // UI
     // =====================================================
@@ -2725,6 +2820,283 @@ int main(int argc, char* argv[])
         wheelTexture,
         SDL_SCALEMODE_LINEAR
     );
+
+    // =====================================================
+ // GHOST TEXTURES
+ // =====================================================
+
+    const char* basePath =
+        SDL_GetBasePath();
+
+    SDL_Log(
+        "GAME BASE PATH: %s",
+        basePath ? basePath : "NULL"
+    );
+
+
+    // =====================================================
+    // GHOST BIKE
+    // =====================================================
+
+    std::string ghostBikePath =
+        std::string(
+            basePath ? basePath : ""
+        ) +
+        "assets/Bike/ai3_ghost_bike.png";
+
+
+    SDL_Log(
+        "Trying Ghost bike: %s",
+        ghostBikePath.c_str()
+    );
+
+
+    SDL_Texture* ghostBikeTexture =
+        IMG_LoadTexture(
+            renderer,
+            ghostBikePath.c_str()
+        );
+
+
+    if (!ghostBikeTexture)
+    {
+        SDL_Log(
+            "GHOST BIKE FAILED: %s",
+            SDL_GetError()
+        );
+    }
+    else
+    {
+        SDL_Log(
+            "GHOST BIKE LOADED"
+        );
+
+        SDL_SetTextureScaleMode(
+            ghostBikeTexture,
+            SDL_SCALEMODE_LINEAR
+        );
+    }
+
+
+    // =====================================================
+    // GHOST WHEEL
+    // =====================================================
+
+    std::string ghostWheelPath =
+        std::string(
+            basePath ? basePath : ""
+        ) +
+        "assets/Bike/ai3_ghost_wheel.png";
+
+
+    SDL_Log(
+        "Trying Ghost wheel: %s",
+        ghostWheelPath.c_str()
+    );
+
+
+    SDL_Texture* ghostWheelTexture =
+        IMG_LoadTexture(
+            renderer,
+            ghostWheelPath.c_str()
+        );
+
+
+    if (!ghostWheelTexture)
+    {
+        SDL_Log(
+            "GHOST WHEEL FAILED: %s",
+            SDL_GetError()
+        );
+    }
+    else
+    {
+        SDL_Log(
+            "GHOST WHEEL LOADED"
+        );
+
+        SDL_SetTextureScaleMode(
+            ghostWheelTexture,
+            SDL_SCALEMODE_LINEAR
+        );
+    }
+
+    // =====================================================
+// AI 1 - LIGHTNING RACER
+// =====================================================
+
+    SDL_Texture* ai1BikeTexture =
+        IMG_LoadTexture(
+            renderer,
+            "assets/Bike/ai3_ghost_bike.png"
+        );
+
+    SDL_Texture* ai1WheelTexture =
+        IMG_LoadTexture(
+            renderer,
+            "assets/Bike/ai3_ghost_wheel.png"
+        );
+
+
+    if (!ai1BikeTexture)
+    {
+        SDL_Log(
+            "AI 1 BIKE FAILED: %s",
+            SDL_GetError()
+        );
+    }
+    else
+    {
+        SDL_SetTextureScaleMode(
+            ai1BikeTexture,
+            SDL_SCALEMODE_LINEAR
+        );
+    }
+
+
+    if (!ai1WheelTexture)
+    {
+        SDL_Log(
+            "AI 1 WHEEL FAILED: %s",
+            SDL_GetError()
+        );
+    }
+    else
+    {
+        SDL_SetTextureScaleMode(
+            ai1WheelTexture,
+            SDL_SCALEMODE_LINEAR
+        );
+    }
+
+
+    // =====================================================
+    // AI 2 - BLAZE RACER
+    // =====================================================
+
+    SDL_Texture* ai2BikeTexture =
+        IMG_LoadTexture(
+            renderer,
+            "assets/Bike/ai3_ghost_bike.png"
+        );
+
+    SDL_Texture* ai2WheelTexture =
+        IMG_LoadTexture(
+            renderer,
+            "assets/Bike/ai3_ghost_wheel.png"
+        );
+
+
+    if (!ai2BikeTexture)
+    {
+        SDL_Log(
+            "AI 2 BIKE FAILED: %s",
+            SDL_GetError()
+        );
+    }
+    else
+    {
+        SDL_SetTextureScaleMode(
+            ai2BikeTexture,
+            SDL_SCALEMODE_LINEAR
+        );
+    }
+
+
+    if (!ai2WheelTexture)
+    {
+        SDL_Log(
+            "AI 2 WHEEL FAILED: %s",
+            SDL_GetError()
+        );
+    }
+    else
+    {
+        SDL_SetTextureScaleMode(
+            ai2WheelTexture,
+            SDL_SCALEMODE_LINEAR
+        );
+    }
+
+    // =====================================================
+    // AI VISUALS
+    // =====================================================
+
+    std::vector<RacerVisual> aiVisuals;
+
+
+    // =====================================================
+// AI 1 - LIGHTNING / FAST RACER
+// =====================================================
+
+    aiVisuals.push_back(
+        {
+            ai1BikeTexture,
+            ai1WheelTexture,
+
+            1448.0f,
+            1086.0f,
+
+            // Rear axle
+            110.0f,
+            846.0f,
+
+            // Front axle
+            1290.0f,
+            872.0f,
+
+            "Volt"
+        }
+    );
+
+
+    // =====================================================
+    // AI 2 - BLAZE / AGGRESSIVE RACER
+    // =====================================================
+
+    aiVisuals.push_back(
+        {
+            ai2BikeTexture,
+            ai2WheelTexture,
+
+            1448.0f,
+            1086.0f,
+
+            // Rear axle
+            162.0f,
+            941.0f,
+
+            // Front axle
+            1250.0f,
+            928.0f,
+
+            "Blaze"
+        }
+    );
+
+
+    // =====================================================
+    // AI 3 - GHOST / STUNT SPECIALIST
+    // =====================================================
+
+    aiVisuals.push_back(
+        {
+            ghostBikeTexture,
+            ghostWheelTexture,
+
+            1448.0f,
+            1086.0f,
+
+            290.0f,
+            825.0f,
+
+            1205.0f,
+            830.0f,
+
+            "Ghost"
+        }
+    );
+
 
 
     if (!bikeTexture)
@@ -4171,6 +4543,7 @@ int main(int argc, char* argv[])
             playerRacer.bike.rearWheelBodyId,
             playerRacer.bike.frontWheelBodyId,
             aiRacers,
+            aiVisuals,
             cameraX,
             environment,
             groundRect,
@@ -4203,12 +4576,50 @@ int main(int argc, char* argv[])
     // =====================================================
 
     b2DestroyWorld(worldId);
-    SDL_DestroyTexture(bikeTexture);
-    SDL_DestroyTexture(wheelTexture);
 
-    SDL_DestroyRenderer(renderer);
-    SDL_DestroyWindow(window);
-    TTF_CloseFont(font);
+    SDL_DestroyTexture(
+        bikeTexture
+    );
+
+    SDL_DestroyTexture(
+        wheelTexture
+    );
+
+    SDL_DestroyTexture(
+        ghostBikeTexture
+    );
+
+    SDL_DestroyTexture(
+        ghostWheelTexture
+    );
+
+    SDL_DestroyTexture(
+        ai1BikeTexture
+    );
+
+    SDL_DestroyTexture(
+        ai1WheelTexture
+    );
+
+    SDL_DestroyTexture(
+        ai2BikeTexture
+    );
+
+    SDL_DestroyTexture(
+        ai2WheelTexture
+    );
+
+    SDL_DestroyRenderer(
+        renderer
+    );
+
+    SDL_DestroyWindow(
+        window
+    );
+
+    TTF_CloseFont(
+        font
+    );
 
     TTF_Quit();
     SDL_Quit();
