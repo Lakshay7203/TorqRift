@@ -1683,6 +1683,543 @@ void DrawRacePositionBadge(
 }
 
 
+
+void DrawRaceResults(
+    SDL_Renderer* renderer,
+    TTF_Font* font,
+    TTF_Font* titleFont,
+    const Racer& playerRacer,
+    const std::vector<Racer>& aiRacers,
+    float bestTime,
+    bool newBestTime)
+{
+    if (!renderer || !font || !titleFont)
+        return;
+
+    // =============================================
+    // TORQRIFT RACE CONTROL - COLORS
+    // =============================================
+
+    const SDL_Color white = { 242, 247, 251, 255 };
+    const SDL_Color muted = { 164, 184, 198, 255 };
+    const SDL_Color teal = { 54, 214, 194, 255 };
+    const SDL_Color gold = { 245, 197, 86, 255 };
+
+    auto fillRect = [&](float x, float y,
+        float w, float h,
+        Uint8 r, Uint8 g,
+        Uint8 b, Uint8 a)
+        {
+            SDL_SetRenderDrawColor(
+                renderer, r, g, b, a
+            );
+
+            SDL_FRect area = { x, y, w, h };
+            SDL_RenderFillRect(renderer, &area);
+        };
+
+    auto formatTime = [](float seconds,
+        char* buffer,
+        size_t bufferSize)
+        {
+            if (seconds < 0.0f)
+            {
+                SDL_snprintf(
+                    buffer, bufferSize, "--:--.--"
+                );
+                return;
+            }
+
+            int centiseconds =
+                static_cast<int>(seconds * 100.0f + 0.5f);
+
+            SDL_snprintf(
+                buffer,
+                bufferSize,
+                "%02d:%02d.%02d",
+                centiseconds / 6000,
+                (centiseconds / 100) % 60,
+                centiseconds % 100
+            );
+        };
+
+    // =============================================
+    // COLLECT AND SORT RACERS
+    // =============================================
+
+    struct ResultRow
+    {
+        const Racer* racer;
+        const char* name;
+        float progressX;
+        bool isPlayer;
+    };
+
+    std::vector<ResultRow> rows;
+
+    rows.push_back({
+        &playerRacer,
+        "YOU",
+        b2Body_GetPosition(
+            playerRacer.bike.chassisBodyId
+        ).x,
+        true
+        });
+
+    const char* aiNames[] = {
+        "SPEEDSTER",
+        "FULL SEND",
+        "BACKFLIP BANDIT"
+    };
+
+    bool allFinished = playerRacer.finished;
+
+    for (size_t i = 0; i < aiRacers.size(); ++i)
+    {
+        const Racer& ai = aiRacers[i];
+
+        rows.push_back({
+            &ai,
+            i < 3 ? aiNames[i] : "AI RACER",
+            b2Body_GetPosition(
+                ai.bike.chassisBodyId
+            ).x,
+            false
+            });
+
+        if (!ai.finished)
+            allFinished = false;
+    }
+
+    std::sort(
+        rows.begin(), rows.end(),
+        [](const ResultRow& a, const ResultRow& b)
+        {
+            if (a.racer->finished != b.racer->finished)
+                return a.racer->finished;
+
+            if (a.racer->finished)
+                return a.racer->finishPlace <
+                b.racer->finishPlace;
+
+            return a.progressX > b.progressX;
+        }
+    );
+
+    // Find the winning time for GAP calculation.
+    float leaderTime = -1.0f;
+
+    for (const ResultRow& row : rows)
+    {
+        if (row.racer->finished &&
+            row.racer->finishPlace == 1 &&
+            row.racer->finishTime >= 0.0f)
+        {
+            leaderTime = row.racer->finishTime;
+            break;
+        }
+    }
+
+    // =============================================
+    // BACKGROUND
+    // =============================================
+
+    SDL_SetRenderDrawBlendMode(
+        renderer, SDL_BLENDMODE_BLEND
+    );
+
+    fillRect(
+        0, 0, SCREEN_WIDTH, SCREEN_HEIGHT,
+        9, 15, 24, 237
+    );
+
+    // =============================================
+    // TOP RACE CONTROL HEADER
+    // =============================================
+
+    fillRect(
+        0, 0, SCREEN_WIDTH, 92,
+        19, 29, 42, 255
+    );
+
+    fillRect(
+        0, 88, SCREEN_WIDTH, 4,
+        54, 214, 194, 255
+    );
+
+    DrawText(
+        renderer, titleFont,
+        "TORQRIFT",
+        47, 16, white
+    );
+
+    DrawText(
+        renderer, font,
+        "RACE CONTROL / RESULTS",
+        365, 29, teal
+    );
+
+    DrawText(
+        renderer, font,
+        allFinished ? "FINAL" : "LIVE",
+        1120, 29,
+        allFinished ? teal : gold
+    );
+
+    // =============================================
+    // LEFT PANEL - PLAYER SUMMARY
+    // =============================================
+
+    const float leftX = 44.0f;
+    const float leftY = 117.0f;
+    const float leftW = 340.0f;
+    const float panelH = 500.0f;
+
+    fillRect(
+        leftX, leftY, leftW, panelH,
+        28, 41, 56, 255
+    );
+
+    fillRect(
+        leftX, leftY, 5, panelH,
+        54, 214, 194, 255
+    );
+
+    DrawText(
+        renderer, font,
+        "YOUR RESULT",
+        leftX + 27, 144, muted
+    );
+
+    // Big position indicator.
+    char positionText[16];
+
+    SDL_snprintf(
+        positionText,
+        sizeof(positionText),
+        "P%02d",
+        playerRacer.finishPlace
+    );
+
+    SDL_Color positionColor =
+        playerRacer.finishPlace == 1
+        ? gold : teal;
+
+    DrawText(
+        renderer, titleFont,
+        positionText,
+        leftX + 27, 188,
+        positionColor
+    );
+
+    const char* positionStatus = "RACE COMPLETE";
+
+    if (playerRacer.finishPlace == 1)
+        positionStatus = "RACE WINNER";
+    else if (playerRacer.finishPlace <= 3)
+        positionStatus = "PODIUM FINISH";
+
+    DrawText(
+        renderer, font,
+        positionStatus,
+        leftX + 27, 257, white
+    );
+
+    // Separation line.
+    fillRect(
+        leftX + 27, 313,
+        leftW - 54, 2,
+        58, 76, 93, 255
+    );
+
+    DrawText(
+        renderer, font,
+        "RACE TIME",
+        leftX + 27, 340, muted
+    );
+
+    char playerTime[32];
+    formatTime(
+        playerRacer.finishTime,
+        playerTime,
+        sizeof(playerTime)
+    );
+
+    DrawText(
+        renderer, titleFont,
+        playerTime,
+        leftX + 27, 379, white
+    );
+
+    fillRect(
+        leftX + 27, 449,
+        leftW - 54, 2,
+        58, 76, 93, 255
+    );
+
+    DrawText(
+        renderer, font,
+        "PERSONAL BEST",
+        leftX + 27, 467, muted
+    );
+
+    char bestTimeText[32];
+    formatTime(
+        bestTime,
+        bestTimeText,
+        sizeof(bestTimeText)
+    );
+
+    DrawText(
+        renderer, font,
+        bestTimeText,
+        leftX + 27, 510, white
+    );
+
+    if (newBestTime)
+    {
+        DrawText(
+            renderer, font,
+            "NEW RECORD",
+            leftX + 27, 558, teal
+        );
+    }
+
+    // =============================================
+    // RIGHT PANEL - CLASSIFICATION
+    // =============================================
+
+    const float tableX = 405.0f;
+    const float tableY = 117.0f;
+    const float tableW = 830.0f;
+
+    fillRect(
+        tableX, tableY,
+        tableW, panelH,
+        28, 41, 56, 255
+    );
+
+    DrawText(
+        renderer, titleFont,
+        "RACE CLASSIFICATION",
+        tableX + 23, 131, white
+    );
+
+    fillRect(
+        tableX + 22, 187,
+        tableW - 44, 2,
+        58, 76, 93, 255
+    );
+
+    // Table column headings.
+    DrawText(
+        renderer, font,
+        "POS", 444, 192, muted
+    );
+
+    DrawText(
+        renderer, font,
+        "RIDER", 547, 192, muted
+    );
+
+    DrawText(
+        renderer, font,
+        "TIME", 925, 192, muted
+    );
+
+    DrawText(
+        renderer, font,
+        "GAP", 1101, 192, muted
+    );
+
+    // =============================================
+    // RESULTS ROWS
+    // =============================================
+
+    const float rowStart = 235.0f;
+    const float rowSpacing = 85.0f;
+
+    for (size_t i = 0; i < rows.size(); ++i)
+    {
+        const ResultRow& row = rows[i];
+
+        float y =
+            rowStart +
+            static_cast<float>(i) * rowSpacing;
+
+        // Row background.
+        if (row.isPlayer)
+        {
+            fillRect(
+                tableX + 17, y,
+                tableW - 34, 75,
+                34, 77, 78, 255
+            );
+        }
+        else
+        {
+            fillRect(
+                tableX + 17, y,
+                tableW - 34, 75,
+                38, 54, 70, 255
+            );
+        }
+
+        // Accent stripe.
+        SDL_Color stripeColor =
+            row.isPlayer ? teal :
+            (row.racer->finishPlace == 1
+                ? gold : muted);
+
+        fillRect(
+            tableX + 17, y,
+            5, 75,
+            stripeColor.r,
+            stripeColor.g,
+            stripeColor.b,
+            255
+        );
+
+        // Position.
+        char rankText[16] = "--";
+
+        if (row.racer->finished)
+        {
+            SDL_snprintf(
+                rankText,
+                sizeof(rankText),
+                "P%02d",
+                row.racer->finishPlace
+            );
+        }
+
+        DrawText(
+            renderer, font,
+            rankText,
+            445, y + 18,
+            row.isPlayer ? teal : white
+        );
+
+        // Racer name.
+        DrawText(
+            renderer, font,
+            row.name,
+            547, y + 10,
+            row.isPlayer ? teal : white
+        );
+
+        DrawText(
+            renderer, font,
+            row.racer->finished
+            ? "CLASSIFIED"
+            : "ON TRACK",
+            547, y + 42, muted
+        );
+
+        // Finishing time.
+        char timeText[32];
+
+        formatTime(
+            row.racer->finishTime,
+            timeText,
+            sizeof(timeText)
+        );
+
+        DrawText(
+            renderer, font,
+            row.racer->finished
+            ? timeText
+            : "RACING",
+            925, y + 18,
+            white
+        );
+
+        // Gap to the winner.
+        char gapText[32] = "--";
+
+        if (row.racer->finished &&
+            leaderTime >= 0.0f)
+        {
+            if (row.racer->finishPlace == 1)
+            {
+                SDL_snprintf(
+                    gapText,
+                    sizeof(gapText),
+                    "LEADER"
+                );
+            }
+            else
+            {
+                SDL_snprintf(
+                    gapText,
+                    sizeof(gapText),
+                    "+%.2f",
+                    std::max(
+                        0.0f,
+                        row.racer->finishTime -
+                        leaderTime
+                    )
+                );
+            }
+        }
+
+        DrawText(
+            renderer, font,
+            gapText,
+            1101, y + 18,
+            row.racer->finishPlace == 1
+            ? gold : muted
+        );
+    }
+
+    // Bottom line within classification panel.
+    fillRect(
+        tableX + 22, 576,
+        tableW - 44, 2,
+        58, 76, 93, 255
+    );
+
+    DrawText(
+        renderer, font,
+        allFinished
+        ? "ALL RACERS CLASSIFIED"
+        : "STANDINGS UPDATE AS RACERS FINISH",
+        tableX + 25, 583,
+        muted
+    );
+
+    // =============================================
+    // BOTTOM ACTION BAR
+    // =============================================
+
+    fillRect(
+        0, 649,
+        SCREEN_WIDTH, 71,
+        19, 29, 42, 255
+    );
+
+    fillRect(
+        920, 659,
+        310, 49,
+        38, 93, 91, 255
+    );
+
+    DrawText(
+        renderer, font,
+        "R - RACE AGAIN",
+        953, 669, white
+    );
+
+    DrawText(
+        renderer, font,
+        "TORQRIFT / RACE COMPLETE",
+        45, 670, muted
+    );
+}
+
+
+
+
 // ---------------------------------------------------------
 // RENDER
 // ---------------------------------------------------------
@@ -1697,6 +2234,7 @@ void Render(
     b2BodyId chassisBodyId,
     b2BodyId rearWheelBodyId,
     b2BodyId frontWheelBodyId,
+    const Racer& playerRacer,
     const std::vector<Racer>& aiRacers,
     const std::vector<RacerVisual>& aiVisuals,
     float cameraX,
@@ -2659,25 +3197,42 @@ void Render(
     // =====================================================
 
 
-    DrawUI(
-        renderer,
-        font,
-        stuntFont,
-        levelComplete,
-        levelTime,
-        stuntText,
-        stuntTextTimer,
-        landingText,
-        landingTextTimer,
-        comboCount,
-        comboTimer,
-        score,
-        bestTime,
-        newBestTime,
-        boostMeter,
-        boostActive,
-        playerRacePosition
-    );
+
+    if (levelComplete)
+    {
+        DrawRaceResults(
+            renderer,
+            font,
+            stuntFont,
+            playerRacer,
+            aiRacers,
+            bestTime,
+            newBestTime
+        );
+    }
+    else
+    {
+        DrawUI(
+            renderer,
+            font,
+            stuntFont,
+            levelComplete,
+            levelTime,
+            stuntText,
+            stuntTextTimer,
+            landingText,
+            landingTextTimer,
+            comboCount,
+            comboTimer,
+            score,
+            bestTime,
+            newBestTime,
+            boostMeter,
+            boostActive,
+            playerRacePosition
+        );
+    }
+
 
 
     // ============================================
@@ -3347,6 +3902,8 @@ int main(int argc, char* argv[])
 
     float levelTime = 0.0f;
 
+    float raceElapsedTime = 0.0f;
+
     // Race start countdown
     float countdownTimer = 3.0f;
     bool raceStarted = false;
@@ -3500,7 +4057,14 @@ int main(int argc, char* argv[])
             }
         }
 
-        // Race timer starts only after GO
+        // Shared race clock for all racers
+        if (raceStarted &&
+            nextFinishPlace <= static_cast<int>(aiRacers.size()) + 1)
+        {
+            raceElapsedTime += deltaTime;
+        }
+
+        // Player's personal race time
         if (raceStarted && !levelComplete)
         {
             levelTime += deltaTime;
@@ -3532,6 +4096,8 @@ int main(int argc, char* argv[])
 
                 levelTime = 0.0f;
 
+                raceElapsedTime = 0.0f;
+
                 countdownTimer = 3.0f;
                 raceStarted = false;
 
@@ -3559,12 +4125,14 @@ int main(int argc, char* argv[])
 
                 playerRacer.finished = false;
                 playerRacer.finishPlace = 0;
+                playerRacer.finishTime = -1.0f;
                 playerRacer.currentPosition = 0;
 
                 for (Racer& aiRacer : aiRacers)
                 {
                     aiRacer.finished = false;
                     aiRacer.finishPlace = 0;
+                    aiRacer.finishTime = -1.0f;
                     aiRacer.currentPosition = 0;
                     aiRacer.grounded = true;
                 }
@@ -4362,6 +4930,8 @@ int main(int argc, char* argv[])
             playerRacer.finishPlace =
                 nextFinishPlace;
 
+            playerRacer.finishTime = levelTime;
+
             ++nextFinishPlace;
 
 
@@ -4400,6 +4970,8 @@ int main(int argc, char* argv[])
                 aiRacer.finishPlace =
                     nextFinishPlace;
 
+
+                aiRacer.finishTime = raceElapsedTime;
                 ++nextFinishPlace;
             }
         }
@@ -4638,6 +5210,7 @@ int main(int argc, char* argv[])
             playerRacer.bike.chassisBodyId,
             playerRacer.bike.rearWheelBodyId,
             playerRacer.bike.frontWheelBodyId,
+            playerRacer,
             aiRacers,
             aiVisuals,
             cameraX,

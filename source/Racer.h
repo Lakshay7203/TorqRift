@@ -18,6 +18,9 @@ struct Racer
 
     int finishPlace = 0;
 
+    // -1 means this racer has not finished yet.
+    float finishTime = -1.0f;
+
     b2Vec2 spawnPosition =
     {
         0.0f,
