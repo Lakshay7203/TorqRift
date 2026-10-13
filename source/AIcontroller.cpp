@@ -616,7 +616,8 @@ void ApplyAIStabilityAssist(
     const Bike& bike,
     bool bikeGrounded,
     const AIProfile& profile,
-    AIState& state)
+    AIState& state,
+    const std::vector<TerrainSegment>& terrainSegments)
 {
     bool doingFlip =
         state.action ==
@@ -655,9 +656,40 @@ void ApplyAIStabilityAssist(
         profile.balanceSkill;
 
 
+
+    // Match the bike's balance target to the terrain.
+    float targetAngle = 0.0f;
+
+    if (bikeGrounded)
+    {
+        float rearX = b2Body_GetPosition(
+            bike.rearWheelBodyId
+        ).x;
+
+        float frontX = b2Body_GetPosition(
+            bike.frontWheelBodyId
+        ).x;
+
+        float rearSlope = GetTerrainSlopeAtX(
+            terrainSegments, rearX
+        );
+
+        float frontSlope = GetTerrainSlopeAtX(
+            terrainSegments, frontX
+        );
+
+        // Average both wheel slopes for smoother transitions.
+        float averageSlope =
+            (rearSlope + frontSlope) * 0.5f;
+
+        targetAngle = std::atan(averageSlope);
+    }
+
+    float angleError = targetAngle - angle;
+
     float targetAngularVelocity =
-        -angle *
-        strength;
+        angleError * strength;
+
 
 
     targetAngularVelocity =

@@ -4356,7 +4356,8 @@ int main(int argc, char* argv[])
                     aiRacer.bike,
                     aiRacer.grounded,
                     profile,
-                    aiState
+                    aiState,
+                    terrain.segments
                 );
             }
             

@@ -87,5 +87,6 @@ void ApplyAIStabilityAssist(
     const Bike& bike,
     bool bikeGrounded,
     const AIProfile& profile,
-    AIState& state
+    AIState& state,
+    const std::vector<TerrainSegment>& terrainSegments
 );
