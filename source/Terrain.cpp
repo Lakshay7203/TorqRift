@@ -229,22 +229,95 @@ Terrain CreateTerrain(b2WorldId worldId)
     // CREATE BOX2D SEGMENTS
     // =====================================================
 
-    for (const TerrainSegment& terrainSegment : terrain.segments)
+
+    // =====================================================
+    // CREATE CONNECTED TERRAIN COLLISION
+    // =====================================================
+
+    std::vector<b2Vec2> chainPoints;
+
+    chainPoints.reserve(
+        terrain.segments.size() + 3
+    );
+
+    // Box2D chains are one-sided.
+    // Right-to-left gives us upward-facing collision.
+
+    const b2Vec2 rightEnd =
+        terrain.segments.back().end;
+
+    const b2Vec2 leftEnd =
+        terrain.segments.front().start;
+
+    // Extra endpoint for smooth chain boundaries.
+    chainPoints.push_back(
+        { rightEnd.x + 10.0f, rightEnd.y }
+    );
+
+    // Add the complete terrain in reverse order.
+    for (auto it = terrain.segments.rbegin();
+        it != terrain.segments.rend();
+        ++it)
     {
-        b2Segment box2dSegment;
-
-        box2dSegment.point1 =
-            terrainSegment.start;
-
-        box2dSegment.point2 =
-            terrainSegment.end;
-
-        b2CreateSegmentShape(
-            terrain.hillBodyId,
-            &hillShapeDef,
-            &box2dSegment
-        );
+        chainPoints.push_back(it->end);
     }
 
+    chainPoints.push_back(leftEnd);
+
+    // Extra endpoint at the left boundary.
+    chainPoints.push_back(
+        { leftEnd.x - 10.0f, leftEnd.y }
+    );
+
+    b2SurfaceMaterial material =
+        b2DefaultSurfaceMaterial();
+
+    material.friction = 1.0f;
+
+    b2ChainDef chainDef =
+        b2DefaultChainDef();
+
+    chainDef.points = chainPoints.data();
+    chainDef.materials = &material;
+    chainDef.materialCount = 1;
+    chainDef.isLoop = false;
+
+    // Support chain definitions from different
+    // Box2D 3.x versions.
+    auto configureChain = [&]<typename T>(T & def)
+    {
+        if constexpr (requires { def.count; })
+        {
+            def.count =
+                static_cast<int>(chainPoints.size());
+        }
+        else
+        {
+            def.pointCount =
+                static_cast<int>(chainPoints.size());
+        }
+
+        if constexpr (requires { def.ghost1; def.ghost2; })
+        {
+            def.ghost1 = {
+                chainPoints.front().x + 10.0f,
+                chainPoints.front().y
+            };
+
+            def.ghost2 = {
+                chainPoints.back().x - 10.0f,
+                chainPoints.back().y
+            };
+        }
+    };
+
+    configureChain(chainDef);
+
+    b2CreateChain(
+        terrain.hillBodyId,
+        &chainDef
+    );
+
     return terrain;
+
 }

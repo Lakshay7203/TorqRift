@@ -31,40 +31,39 @@ AIProfile GetAIProfile(
     }
 
 
-    // =====================================================
-    // AI 2 - AGGRESSIVE ALL-ROUNDER
-    // =====================================================
+    // ============================================
+// AI 2 - GRAVEL
+// Steady climber, safer rider
+// ============================================
 
     if (racerIndex == 1)
     {
-        return
-        {
-            1.15f,     // faster than player
-            4.8f,      // stronger hop
-            1.30f,     // much stronger air rotation
-            2,         // stunt every 2 jumps
-            false,     // front flips
-            0.70f,
-            3.5f,
-            1.15f
+        return {
+            0.98f, // Speed
+            3.9f,  // Jump strength
+            0.92f, // Air control
+            5,     // Stunt frequency (lower)
+            false, // Prefers front flips
+            0.35f, // Wheelie duration
+            6.0f,  // Wheelie interval
+            1.65f  // Strong balance
         };
     }
 
+    // ============================================
+    // AI 3 - RIOT
+    // Wild, risky stunt racer
+    // ============================================
 
-    // =====================================================
-    // AI 3 - STUNT SPECIALIST
-    // =====================================================
-
-    return
-    {
-        1.12f,
-        5.0f,          // biggest jumps
-        1.40f,         // strongest rotation
-        1,             // stunt EVERY good jump
-        true,          // backflips
-        0.95f,
-        2.8f,
-        1.10f
+    return {
+        1.16f, // Speed
+        5.1f,  // Jump strength
+        1.60f, // Air control
+        1,     // Frequent stunts
+        true,  // Prefers backflips
+        0.85f, // Wheelie duration
+        2.5f,  // Wheelie interval
+        0.95f  // Less balance
     };
 }
 
