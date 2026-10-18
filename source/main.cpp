@@ -42,6 +42,77 @@ constexpr float COMBO_WINDOW = 3.0f;
 
 
 
+struct GhostProgression
+{
+    // 0 = White, 1 = Cyan, 2 = Green, 3 = Purple
+    std::array<bool, 4> unlocked =
+    { true, false, false, false };
+
+    int equippedColor = 0;
+
+    bool levelOneTrophy = false;
+};
+
+const char* GetGhostColorName(int color)
+{
+    switch (color)
+    {
+    case 1: return "CYAN";
+    case 2: return "GREEN";
+    case 3: return "PURPLE";
+    default: return "WHITE";
+    }
+}
+
+void SaveGhostProgress(const GhostProgression& p)
+{
+    std::ofstream file("torqrift_progress.txt");
+
+    if (!file)
+    {
+        SDL_Log("Could not save Ghost progression");
+        return;
+    }
+
+    file << p.levelOneTrophy << ' '
+        << p.equippedColor << ' '
+        << p.unlocked[1] << ' '
+        << p.unlocked[2] << ' '
+        << p.unlocked[3];
+}
+
+GhostProgression LoadGhostProgress()
+{
+    GhostProgression p;
+
+    std::ifstream file("torqrift_progress.txt");
+
+    int trophy = 0;
+    int equipped = 0;
+    int cyan = 0;
+    int green = 0;
+    int purple = 0;
+
+    if (file >> trophy >> equipped
+        >> cyan >> green >> purple)
+    {
+        p.levelOneTrophy = (trophy != 0);
+
+        p.unlocked[1] = (cyan != 0);
+        p.unlocked[2] = (green != 0);
+        p.unlocked[3] = (purple != 0);
+
+        if (equipped >= 0 &&
+            equipped < 4 &&
+            p.unlocked[equipped])
+        {
+            p.equippedColor = equipped;
+        }
+    }
+
+    return p;
+}
+
 
 void ProcessInput(
     bool& running,
@@ -1686,6 +1757,121 @@ void DrawRacePositionBadge(
 }
 
 
+void DrawGhostRewardUI(
+    SDL_Renderer* renderer,
+    TTF_Font* font,
+    const GhostProgression& progress,
+    bool levelComplete,
+    int finishPlace)
+{
+    if (!levelComplete || !font)
+        return;
+
+    SDL_SetRenderDrawBlendMode(
+        renderer,
+        SDL_BLENDMODE_BLEND
+    );
+
+    SDL_SetRenderDrawColor(
+        renderer, 20, 29, 43, 255
+    );
+
+    SDL_FRect panel =
+    {
+        0.0f, 628.0f,
+        1280.0f, 92.0f
+    };
+
+    SDL_RenderFillRect(renderer, &panel);
+
+    SDL_Color gold =
+    { 255, 210, 85, 255 };
+
+    SDL_Color white =
+    { 245, 245, 245, 255 };
+
+    SDL_Color green =
+    { 110, 255, 150, 255 };
+
+    if (finishPlace > 2 &&
+        !progress.levelOneTrophy)
+    {
+        DrawText(
+            renderer, font,
+            "FINISH 1ST OR 2ND TO UNLOCK A GHOST COLOR",
+            50, 646, gold
+        );
+
+        DrawText(
+            renderer, font,
+            "PRESS R TO RACE AGAIN",
+            50, 683, white
+        );
+
+        return;
+    }
+
+    if (!progress.levelOneTrophy)
+    {
+        DrawText(
+            renderer, font,
+            "VICTORY! TROPHY + ONE COLOR REWARD",
+            50, 640, gold
+        );
+
+        DrawText(
+            renderer, font,
+            "CLAIM: 1 CYAN  |  2 GREEN  |  3 PURPLE",
+            50, 678, white
+        );
+
+        return;
+    }
+
+    std::string inventory = "OWNED: WHITE";
+
+    for (int i = 1; i < 4; ++i)
+    {
+        if (progress.unlocked[i])
+        {
+            inventory += " / ";
+            inventory += GetGhostColorName(i);
+        }
+    }
+
+    DrawText(
+        renderer, font,
+        "TROPHY UNLOCKED!",
+        50, 636, gold
+    );
+
+    DrawText(
+        renderer, font,
+        inventory.c_str(),
+        50, 668, white
+    );
+
+    std::string equipped =
+        "EQUIPPED: ";
+
+    equipped +=
+        GetGhostColorName(
+            progress.equippedColor
+        );
+
+    DrawText(
+        renderer, font,
+        equipped.c_str(),
+        755, 636, green
+    );
+
+    DrawText(
+        renderer, font,
+        "0 WHITE  /  1 CYAN  /  2 GREEN  /  3 PURPLE",
+        755, 675, white
+    );
+}
+
 
 void DrawRaceResults(
     SDL_Renderer* renderer,
@@ -2264,7 +2450,8 @@ void Render(
     int playerRacePosition,
     const ParticleSystem& particleSystem,
     float countdownTimer,
-    bool raceStarted)
+    bool raceStarted,
+    const GhostProgression& progression)
 
 {
 
@@ -2959,17 +3146,34 @@ void Render(
         artAxleAngleDegrees;
 
 
-    // Draw rider + motorcycle frame.
 
-    SDL_RenderTextureRotated(
-        renderer,
-        bikeTexture,
-        nullptr,
-        &bikeRect,
-        bikeVisualAngle,
-        &bikePivot,
-        SDL_FLIP_NONE
-    );
+    if (progression.equippedColor == 0)
+    {
+        // Original white Ghost.
+        SDL_RenderTextureRotated(
+            renderer,
+            bikeTexture,
+            nullptr,
+            &bikeRect,
+            bikeVisualAngle,
+            &bikePivot,
+            SDL_FLIP_NONE
+        );
+    }
+    else
+    {
+        // Use the unlocked AI color artwork.
+        const RacerVisual& equippedVisual =
+            aiVisuals[progression.equippedColor - 1];
+
+        DrawBikeSprite(
+            renderer,
+            equippedVisual,
+            rearWheelScreen,
+            frontWheelScreen
+        );
+    }
+
 
 
     // =====================================================
@@ -3052,26 +3256,52 @@ void Render(
     // DRAW WHEELS
     // -----------------------------------------------------
 
-    SDL_RenderTextureRotated(
-        renderer,
-        wheelTexture,
-        nullptr,
-        &rearWheelRect,
-        rearWheelAngle,
-        nullptr,
-        SDL_FLIP_NONE
-    );
 
+    if (progression.equippedColor == 0)
+    {
+        // Original white wheels.
+        SDL_RenderTextureRotated(
+            renderer,
+            wheelTexture,
+            nullptr,
+            &rearWheelRect,
+            rearWheelAngle,
+            nullptr,
+            SDL_FLIP_NONE
+        );
 
-    SDL_RenderTextureRotated(
-        renderer,
-        wheelTexture,
-        nullptr,
-        &frontWheelRect,
-        frontWheelAngle,
-        nullptr,
-        SDL_FLIP_NONE
-    );
+        SDL_RenderTextureRotated(
+            renderer,
+            wheelTexture,
+            nullptr,
+            &frontWheelRect,
+            frontWheelAngle,
+            nullptr,
+            SDL_FLIP_NONE
+        );
+    }
+    else
+    {
+        const RacerVisual& equippedVisual =
+            aiVisuals[progression.equippedColor - 1];
+
+        DrawWheelSprite(
+            renderer,
+            equippedVisual.wheelTexture,
+            rearWheelBodyId,
+            rearWheelScreen,
+            1.55f
+        );
+
+        DrawWheelSprite(
+            renderer,
+            equippedVisual.wheelTexture,
+            frontWheelBodyId,
+            frontWheelScreen,
+            1.55f
+        );
+    }
+
 
     // =====================================================
     // AI RACERS
@@ -3234,6 +3464,14 @@ void Render(
             playerRacePosition
         );
     }
+
+    DrawGhostRewardUI(
+        renderer,
+        font,
+        progression,
+        levelComplete,
+        playerRacer.finishPlace
+    );
 
 
 
@@ -3412,13 +3650,13 @@ int main(int argc, char* argv[])
     SDL_Texture* bikeTexture =
         IMG_LoadTexture(
             renderer,
-            "assets/Bike/rider_chassis.png"
+            "assets/Bike/rider_chassis_.png"
         );
 
     SDL_Texture* wheelTexture =
         IMG_LoadTexture(
             renderer,
-            "assets/Bike/bike_wheel.png"
+            "assets/Bike/bike_wheel_.png"
         );
 
     SDL_SetTextureScaleMode(
@@ -3867,6 +4105,12 @@ int main(int argc, char* argv[])
     
     bool levelComplete = false; 
 
+    GhostProgression progression =
+        LoadGhostProgress();
+
+    std::array<bool, 4> previousColorKeys =
+    { false, false, false, false };
+
     bool checkpointReached = false;
 
     float levelTime = 0.0f;
@@ -4048,6 +4292,78 @@ int main(int argc, char* argv[])
             running,
             input
         );
+
+
+        // ============================================
+        // GHOST COLOR REWARDS / INVENTORY
+        // ============================================
+
+        const bool* keys =
+            SDL_GetKeyboardState(nullptr);
+
+        const SDL_Scancode colorKeys[4] =
+        {
+            SDL_SCANCODE_0,
+            SDL_SCANCODE_1,
+            SDL_SCANCODE_2,
+            SDL_SCANCODE_3
+        };
+
+        int selectedColor = -1;
+
+        for (int i = 0; i < 4; ++i)
+        {
+            bool down = keys[colorKeys[i]];
+
+            if (down && !previousColorKeys[i])
+            {
+                selectedColor = i;
+            }
+
+            previousColorKeys[i] = down;
+        }
+
+        if (selectedColor >= 0)
+        {
+            bool canClaimReward =
+                levelComplete &&
+                playerRacer.finishPlace >= 1 &&
+                playerRacer.finishPlace <= 2 &&
+                !progression.levelOneTrophy;
+
+            if (canClaimReward &&
+                selectedColor > 0)
+            {
+                // Claim one AI color from Level 1.
+                progression.unlocked[selectedColor] =
+                    true;
+
+                progression.levelOneTrophy = true;
+
+                progression.equippedColor =
+                    selectedColor;
+
+                SaveGhostProgress(progression);
+
+                SDL_Log(
+                    "TROPHY EARNED! Unlocked %s",
+                    GetGhostColorName(selectedColor)
+                );
+            }
+            else if (progression.unlocked[selectedColor])
+            {
+                // Equip an already-owned color.
+                if (progression.equippedColor !=
+                    selectedColor)
+                {
+                    progression.equippedColor =
+                        selectedColor;
+
+                    SaveGhostProgress(progression);
+                }
+            }
+        }
+
 
 
         if (input.resetPressed)
@@ -5207,7 +5523,8 @@ int main(int argc, char* argv[])
             playerRacer.currentPosition,
             particleSystem,
             countdownTimer,
-            raceStarted
+            raceStarted,
+            progression
         );
     }
 
