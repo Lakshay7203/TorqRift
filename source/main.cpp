@@ -14,6 +14,8 @@
 #include "AIController.h"
 #include "Racer.h"
 #include <string>
+#include <array>
+#include <fstream>
 
 // ---------------------------------------------------------
 // CONSTANTS
@@ -1136,7 +1138,8 @@ void DrawWheelSprite(
     SDL_Renderer* renderer,
     SDL_Texture* wheelTexture,
     b2BodyId wheelBodyId,
-    const SDL_FPoint& wheelScreen)
+    const SDL_FPoint& wheelScreen,
+    float wheelVisualScale = 1.55f)
 {
     float wheelAngleRadians =
         b2Rot_GetAngle(
@@ -1155,12 +1158,10 @@ void DrawWheelSprite(
         2.0f *
         PIXELS_PER_METER;
 
-    // Compensates for transparent padding around our PNG.
-    constexpr float WHEEL_VISUAL_SCALE = 1.55f;
 
     float wheelSize =
         physicsDiameter *
-        WHEEL_VISUAL_SCALE;
+        wheelVisualScale;
 
     SDL_FRect wheelRect =
     {
@@ -1194,6 +1195,8 @@ struct RacerVisual
 
     float frontAxleX = 0.0f;
     float frontAxleY = 0.0f;
+
+    float bodyHeightScale = 1.0f;
 
     const char* name = "";
 };
@@ -1237,8 +1240,8 @@ void DrawBikeSprite(
         visual.rearAxleX;
 
     float artDY =
-        visual.frontAxleY -
-        visual.rearAxleY;
+        (visual.frontAxleY - visual.rearAxleY) *
+        visual.bodyHeightScale;
 
 
     float artWheelDistance =
@@ -1271,7 +1274,8 @@ void DrawBikeSprite(
 
     bikeRect.h =
         visual.artHeight *
-        scale;
+        scale *
+        visual.bodyHeightScale;
 
 
     // =====================================================
@@ -1321,9 +1325,8 @@ void DrawBikeSprite(
     SDL_FPoint pivot =
     {
         artMidX * scale,
-        artMidY * scale
+        artMidY * scale * visual.bodyHeightScale
     };
-
 
     bikeRect.x =
         screenMidX -
@@ -1767,9 +1770,9 @@ void DrawRaceResults(
         });
 
     const char* aiNames[] = {
-        "SPEEDSTER",
-        "FULL SEND",
-        "BACKFLIP BANDIT"
+    "VOLT",
+    "GRAVEL",
+    "RIOT"
     };
 
     bool allFinished = playerRacer.finished;
@@ -3153,28 +3156,27 @@ void Render(
         );
 
 
-        // =================================================
-        // REAR WHEEL
-        // =================================================
 
+        float aiWheelScale = 1.55f;
+
+        // Rear wheel
         DrawWheelSprite(
             renderer,
             visual.wheelTexture,
             aiRacer.bike.rearWheelBodyId,
-            aiRearWheelScreen
+            aiRearWheelScreen,
+            aiWheelScale
         );
 
-
-        // =================================================
-        // FRONT WHEEL
-        // =================================================
-
+        // Front wheel
         DrawWheelSprite(
             renderer,
             visual.wheelTexture,
             aiRacer.bike.frontWheelBodyId,
-            aiFrontWheelScreen
+            aiFrontWheelScreen,
+            aiWheelScale
         );
+
     }
 
 
@@ -3529,102 +3531,66 @@ int main(int argc, char* argv[])
         );
     }
 
-    // =====================================================
-// AI 1 - LIGHTNING RACER
-// =====================================================
+    // ============================================
+// AI 2 - GRAVEL
+// ============================================
 
-    SDL_Texture* ai1BikeTexture =
+    SDL_Texture* gravelBikeTexture =
         IMG_LoadTexture(
             renderer,
-            "assets/Bike/ai3_ghost_bike.png"
+            "assets/Bike/ai1_ghost_bike.png"
         );
 
-    SDL_Texture* ai1WheelTexture =
+    SDL_Texture* gravelWheelTexture =
         IMG_LoadTexture(
             renderer,
-            "assets/Bike/ai3_ghost_wheel.png"
+            "assets/Bike/ai1_ghost_wheel.png"
         );
 
+    // ============================================
+    // AI 3 - RIOT
+    // ============================================
 
-    if (!ai1BikeTexture)
-    {
-        SDL_Log(
-            "AI 1 BIKE FAILED: %s",
-            SDL_GetError()
-        );
-    }
-    else
-    {
-        SDL_SetTextureScaleMode(
-            ai1BikeTexture,
-            SDL_SCALEMODE_LINEAR
-        );
-    }
-
-
-    if (!ai1WheelTexture)
-    {
-        SDL_Log(
-            "AI 1 WHEEL FAILED: %s",
-            SDL_GetError()
-        );
-    }
-    else
-    {
-        SDL_SetTextureScaleMode(
-            ai1WheelTexture,
-            SDL_SCALEMODE_LINEAR
-        );
-    }
-
-
-    // =====================================================
-    // AI 2 - BLAZE RACER
-    // =====================================================
-
-    SDL_Texture* ai2BikeTexture =
+    SDL_Texture* riotBikeTexture =
         IMG_LoadTexture(
             renderer,
-            "assets/Bike/ai3_ghost_bike.png"
+            "assets/Bike/ai2_ghost_bike.png"
         );
 
-    SDL_Texture* ai2WheelTexture =
+    SDL_Texture* riotWheelTexture =
         IMG_LoadTexture(
             renderer,
-            "assets/Bike/ai3_ghost_wheel.png"
+            "assets/Bike/ai2_ghost_wheel.png"
         );
 
-
-    if (!ai2BikeTexture)
+    if (!gravelBikeTexture ||
+        !gravelWheelTexture ||
+        !riotBikeTexture ||
+        !riotWheelTexture)
     {
         SDL_Log(
-            "AI 2 BIKE FAILED: %s",
+            "AI asset loading failed: %s",
             SDL_GetError()
         );
-    }
-    else
-    {
-        SDL_SetTextureScaleMode(
-            ai2BikeTexture,
-            SDL_SCALEMODE_LINEAR
-        );
+        return 1;
     }
 
+    SDL_SetTextureScaleMode(
+        gravelBikeTexture, SDL_SCALEMODE_LINEAR
+    );
 
-    if (!ai2WheelTexture)
-    {
-        SDL_Log(
-            "AI 2 WHEEL FAILED: %s",
-            SDL_GetError()
-        );
-    }
-    else
-    {
-        SDL_SetTextureScaleMode(
-            ai2WheelTexture,
-            SDL_SCALEMODE_LINEAR
-        );
-    }
+    SDL_SetTextureScaleMode(
+        gravelWheelTexture, SDL_SCALEMODE_LINEAR
+    );
+
+    SDL_SetTextureScaleMode(
+        riotBikeTexture, SDL_SCALEMODE_LINEAR
+    );
+
+    SDL_SetTextureScaleMode(
+        riotWheelTexture, SDL_SCALEMODE_LINEAR
+    );
+
 
     // =====================================================
     // AI VISUALS
@@ -3632,60 +3598,9 @@ int main(int argc, char* argv[])
 
     std::vector<RacerVisual> aiVisuals;
 
-
-    // =====================================================
-// AI 1 - LIGHTNING / FAST RACER
-// =====================================================
-
-    aiVisuals.push_back(
-        {
-            ai1BikeTexture,
-            ai1WheelTexture,
-
-            1448.0f,
-            1086.0f,
-
-            // Rear axle
-            110.0f,
-            846.0f,
-
-            // Front axle
-            1290.0f,
-            872.0f,
-
-            "Volt"
-        }
-    );
-
-
-    // =====================================================
-    // AI 2 - BLAZE / AGGRESSIVE RACER
-    // =====================================================
-
-    aiVisuals.push_back(
-        {
-            ai2BikeTexture,
-            ai2WheelTexture,
-
-            1448.0f,
-            1086.0f,
-
-            // Rear axle
-            162.0f,
-            941.0f,
-
-            // Front axle
-            1250.0f,
-            928.0f,
-
-            "Blaze"
-        }
-    );
-
-
-    // =====================================================
-    // AI 3 - GHOST / STUNT SPECIALIST
-    // =====================================================
+    // ============================================
+    // AI 1 - EXISTING RACER
+    // ============================================
 
     aiVisuals.push_back(
         {
@@ -3701,9 +3616,63 @@ int main(int argc, char* argv[])
             1205.0f,
             830.0f,
 
+            1.0f,
             "Ghost"
         }
     );
+
+    // ============================================
+    // AI 2 - GRAVEL
+    // ============================================
+
+    aiVisuals.push_back(
+        {
+            gravelBikeTexture,
+            gravelWheelTexture,
+
+            1448.0f,
+            1086.0f,
+
+            // Rear axle
+            249.0f,
+            869.0f,
+
+            // Front axle
+            1176.0f,
+            964.0f,
+
+            1.0f,
+            "Gravel"
+        }
+    );
+
+    // ============================================
+    // AI 3 - RIOT
+    // ============================================
+
+    aiVisuals.push_back(
+        {
+            riotBikeTexture,
+            riotWheelTexture,
+
+            1448.0f,
+            1086.0f,
+
+            // Rear axle
+            260.0f,
+            895.0f,
+
+            // Front axle
+            1177.0f,
+            965.0f,
+
+            1.0f,
+            "Riot"
+        }
+    );
+
+
+   
 
 
 
@@ -4356,7 +4325,8 @@ int main(int argc, char* argv[])
                     aiRacer.bike,
                     aiRacer.grounded,
                     profile,
-                    aiState
+                    aiState,
+                    terrain.segments
                 );
             }
             
@@ -5264,21 +5234,11 @@ int main(int argc, char* argv[])
         ghostWheelTexture
     );
 
-    SDL_DestroyTexture(
-        ai1BikeTexture
-    );
+    SDL_DestroyTexture(gravelBikeTexture);
+    SDL_DestroyTexture(gravelWheelTexture);
 
-    SDL_DestroyTexture(
-        ai1WheelTexture
-    );
-
-    SDL_DestroyTexture(
-        ai2BikeTexture
-    );
-
-    SDL_DestroyTexture(
-        ai2WheelTexture
-    );
+    SDL_DestroyTexture(riotBikeTexture);
+    SDL_DestroyTexture(riotWheelTexture);
 
     SDL_DestroyRenderer(
         renderer
