@@ -14,8 +14,6 @@
 #include "AIController.h"
 #include "Racer.h"
 #include <string>
-#include <array>
-#include <fstream>
 
 // ---------------------------------------------------------
 // CONSTANTS
@@ -41,78 +39,14 @@ constexpr float CHECKPOINT_X = 155.0f;
 constexpr float COMBO_WINDOW = 3.0f;
 
 
-
-struct GhostProgression
+enum class GameScreen
 {
-    // 0 = White, 1 = Cyan, 2 = Green, 3 = Purple
-    std::array<bool, 4> unlocked =
-    { true, false, false, false };
-
-    int equippedColor = 0;
-
-    bool levelOneTrophy = false;
+    MainMenu,
+    LevelSelect,
+    RiderSelect,
+    Achievements,
+    Race
 };
-
-const char* GetGhostColorName(int color)
-{
-    switch (color)
-    {
-    case 1: return "CYAN";
-    case 2: return "GREEN";
-    case 3: return "PURPLE";
-    default: return "WHITE";
-    }
-}
-
-void SaveGhostProgress(const GhostProgression& p)
-{
-    std::ofstream file("torqrift_progress.txt");
-
-    if (!file)
-    {
-        SDL_Log("Could not save Ghost progression");
-        return;
-    }
-
-    file << p.levelOneTrophy << ' '
-        << p.equippedColor << ' '
-        << p.unlocked[1] << ' '
-        << p.unlocked[2] << ' '
-        << p.unlocked[3];
-}
-
-GhostProgression LoadGhostProgress()
-{
-    GhostProgression p;
-
-    std::ifstream file("torqrift_progress.txt");
-
-    int trophy = 0;
-    int equipped = 0;
-    int cyan = 0;
-    int green = 0;
-    int purple = 0;
-
-    if (file >> trophy >> equipped
-        >> cyan >> green >> purple)
-    {
-        p.levelOneTrophy = (trophy != 0);
-
-        p.unlocked[1] = (cyan != 0);
-        p.unlocked[2] = (green != 0);
-        p.unlocked[3] = (purple != 0);
-
-        if (equipped >= 0 &&
-            equipped < 4 &&
-            p.unlocked[equipped])
-        {
-            p.equippedColor = equipped;
-        }
-    }
-
-    return p;
-}
-
 
 void ProcessInput(
     bool& running,
@@ -1153,7 +1087,7 @@ void DrawCheckpoint(
 
     const float checkpointGroundY =
         SCREEN_CENTER_Y -
-        (-4.0f * PIXELS_PER_METER);
+        (-9.0f * PIXELS_PER_METER);
 
     // Yellow before reaching it, green afterwards.
     if (checkpointReached)
@@ -1204,6 +1138,644 @@ void DrawCheckpoint(
         &flag
     );
 }
+
+
+void DrawGroundFog(
+    SDL_Renderer* renderer,
+    float cameraX,
+    const std::vector<TerrainSegment>& terrainSegments)
+{
+   
+
+    const float time =
+        static_cast<float>(SDL_GetTicksNS()) /
+        1000000000.0f;
+
+    constexpr int SEGMENTS = 16;
+    constexpr float TWO_PI = 6.2831853f;
+
+    SDL_SetRenderDrawBlendMode(
+        renderer, SDL_BLENDMODE_BLEND
+    );
+
+
+    for (float worldX = 0.0f;
+        worldX <= FINISH_X;
+        worldX += 10.0f)
+
+    {
+        float groundY = 0.0f;
+        bool foundGround = false;
+
+        // Find the height of the track.
+        for (const TerrainSegment& segment : terrainSegments)
+        {
+            float dx = segment.end.x - segment.start.x;
+
+            if (std::fabs(dx) < 0.001f)
+                continue;
+
+            float t = (worldX - segment.start.x) / dx;
+
+            if (t >= 0.0f && t <= 1.0f)
+            {
+                groundY =
+                    segment.start.y +
+                    (segment.end.y - segment.start.y) * t;
+
+                foundGround = true;
+                break;
+            }
+        }
+
+        if (!foundGround)
+            continue;
+
+        float screenX =
+            CAMERA_TARGET_X +
+            (worldX - cameraX) * PIXELS_PER_METER;
+
+        float screenY =
+            SCREEN_CENTER_Y -
+            groundY * PIXELS_PER_METER;
+
+        if (screenX < -170.0f ||
+            screenX > SCREEN_WIDTH + 170.0f)
+            continue;
+
+        // Give each fog patch a different motion.
+        float phase = worldX * 0.17f;
+
+        float drift =
+            std::sin(time * 0.45f + phase) * 18.0f;
+
+        float breathing =
+            std::sin(time * 0.7f + phase) * 0.12f;
+
+        // Multiple overlapping wisps.
+        for (int layer = 0; layer < 3; ++layer)
+        {
+            float centerX =
+                screenX + drift + layer * 25.0f;
+
+            float centerY =
+                screenY - 12.0f - layer * 9.0f;
+
+            float radiusX =
+                65.0f + layer * 15.0f;
+
+            float radiusY =
+                12.0f + layer * 5.0f +
+                breathing * 5.0f;
+
+            SDL_Vertex vertices[SEGMENTS + 1]{};
+            int indices[SEGMENTS * 3]{};
+
+            // Soft blue-gray fog center.
+            vertices[0].position =
+            { centerX, centerY };
+
+            vertices[0].color =
+            { 0.65f, 0.74f, 0.88f, 0.16f };
+
+            // Transparent edges.
+            for (int i = 0; i < SEGMENTS; ++i)
+            {
+                float angle =
+                    TWO_PI * i / SEGMENTS;
+
+                vertices[i + 1].position =
+                {
+                    centerX + std::cos(angle) * radiusX,
+                    centerY + std::sin(angle) * radiusY
+                };
+
+                vertices[i + 1].color =
+                { 0.65f, 0.74f, 0.88f, 0.0f };
+
+                indices[i * 3] = 0;
+                indices[i * 3 + 1] = i + 1;
+                indices[i * 3 + 2] =
+                    ((i + 1) % SEGMENTS) + 1;
+            }
+
+            SDL_RenderGeometry(
+                renderer,
+                nullptr,
+                vertices,
+                SEGMENTS + 1,
+                indices,
+                SEGMENTS * 3
+            );
+        }
+    }
+}
+
+
+void DrawHauntedLanterns(
+    SDL_Renderer* renderer,
+    float cameraX,
+    const std::vector<TerrainSegment>& terrainSegments)
+{
+    const float lanternPositions[] =
+    {
+        29.0f, 85.0f, 132.0f,
+        177.0f, 225.0f, 273.0f,
+        309.0f
+    };
+
+    SDL_SetRenderDrawBlendMode(
+        renderer, SDL_BLENDMODE_BLEND
+    );
+
+    for (float worldX : lanternPositions)
+    {
+        for (const TerrainSegment& segment : terrainSegments)
+        {
+            float minX = std::min(
+                segment.start.x, segment.end.x);
+
+            float maxX = std::max(
+                segment.start.x, segment.end.x);
+
+            float dx = segment.end.x - segment.start.x;
+
+            if (worldX < minX || worldX > maxX ||
+                std::fabs(dx) < 0.001f)
+                continue;
+
+            float t =
+                (worldX - segment.start.x) / dx;
+
+            float worldY =
+                segment.start.y +
+                (segment.end.y - segment.start.y) * t;
+
+            float x = CAMERA_TARGET_X +
+                (worldX - cameraX) * PIXELS_PER_METER;
+
+            float y = SCREEN_CENTER_Y -
+                worldY * PIXELS_PER_METER;
+
+            if (x < -70.0f || x > SCREEN_WIDTH + 70.0f)
+                break;
+
+            // Soft warm glow.
+            SDL_SetRenderDrawColor(
+                renderer, 255, 148, 40, 30);
+
+            SDL_FRect outerGlow =
+            {
+                x - 28.0f, y - 94.0f,
+                56.0f, 56.0f
+            };
+
+            SDL_RenderFillRect(renderer, &outerGlow);
+
+            SDL_SetRenderDrawColor(
+                renderer, 255, 175, 60, 55);
+
+            SDL_FRect innerGlow =
+            {
+                x - 17.0f, y - 83.0f,
+                34.0f, 34.0f
+            };
+
+            SDL_RenderFillRect(renderer, &innerGlow);
+
+            // Wooden post.
+            SDL_SetRenderDrawColor(
+                renderer, 48, 34, 32, 255);
+
+            SDL_FRect post =
+            {
+                x - 3.0f, y - 70.0f,
+                6.0f, 70.0f
+            };
+
+            SDL_RenderFillRect(renderer, &post);
+
+            // Lantern frame.
+            SDL_SetRenderDrawColor(
+                renderer, 22, 20, 28, 255);
+
+            SDL_FRect frame =
+            {
+                x - 11.0f, y - 78.0f,
+                22.0f, 28.0f
+            };
+
+            SDL_RenderFillRect(renderer, &frame);
+
+            // Glowing glass.
+            SDL_SetRenderDrawColor(
+                renderer, 255, 171, 48, 255);
+
+            SDL_FRect glass =
+            {
+                x - 7.0f, y - 74.0f,
+                14.0f, 19.0f
+            };
+
+            SDL_RenderFillRect(renderer, &glass);
+
+            // Bright flame core.
+            SDL_SetRenderDrawColor(
+                renderer, 255, 237, 145, 255);
+
+            SDL_FRect flame =
+            {
+                x - 3.0f, y - 69.0f,
+                6.0f, 12.0f
+            };
+
+            SDL_RenderFillRect(renderer, &flame);
+            break;
+        }
+    }
+}
+
+
+
+void DrawBrokenFences(
+    SDL_Renderer* renderer,
+    float cameraX,
+    const std::vector<TerrainSegment>& terrainSegments)
+{
+    // Four small fence groups across the level.
+
+    const float fencePositions[] =
+    {
+        20.0f, 46.0f, 72.0f,
+        96.0f, 119.0f, 140.0f,
+        164.0f, 187.0f, 212.0f,
+        238.0f, 261.0f, 297.0f
+    };
+
+
+    // Find the terrain height at any world X.
+    auto GetGroundY = [&](float worldX, float& worldY)
+        {
+            for (const TerrainSegment& segment : terrainSegments)
+            {
+                float minX = std::min(
+                    segment.start.x, segment.end.x);
+
+                float maxX = std::max(
+                    segment.start.x, segment.end.x);
+
+                float dx = segment.end.x - segment.start.x;
+
+                if (worldX < minX || worldX > maxX ||
+                    std::fabs(dx) < 0.001f)
+                    continue;
+
+                float t = (worldX - segment.start.x) / dx;
+
+                worldY = segment.start.y +
+                    (segment.end.y - segment.start.y) * t;
+
+                return true;
+            }
+
+            return false;
+        };
+
+
+    const int fenceGroupCount =
+        static_cast<int>(
+            sizeof(fencePositions) /
+            sizeof(fencePositions[0])
+            );
+
+    for (int group = 0; group < fenceGroupCount; ++group)
+
+    {
+        SDL_FPoint posts[4]{};
+        bool valid = true;
+
+        // Four posts per fence group.
+        for (int i = 0; i < 4; ++i)
+        {
+            float worldX =
+                fencePositions[group] + i * 0.9f;
+
+            float worldY = 0.0f;
+
+            if (!GetGroundY(worldX, worldY))
+            {
+                valid = false;
+                break;
+            }
+
+            posts[i].x = CAMERA_TARGET_X +
+                (worldX - cameraX) * PIXELS_PER_METER;
+
+            posts[i].y = SCREEN_CENTER_Y -
+                worldY * PIXELS_PER_METER;
+        }
+
+        if (!valid)
+            continue;
+
+        if (posts[3].x < -100.0f ||
+            posts[0].x > SCREEN_WIDTH + 100.0f)
+            continue;
+
+        // =====================================
+        // BROKEN HORIZONTAL PLANKS
+        // =====================================
+
+        SDL_SetRenderDrawColor(
+            renderer, 83, 58, 45, 255);
+
+        for (int i = 0; i < 3; ++i)
+        {
+            // Some boards are missing.
+            bool broken =
+                (group + i) % 4 == 1;
+
+            if (!broken)
+            {
+                SDL_RenderLine(
+                    renderer,
+                    posts[i].x,
+                    posts[i].y - 28.0f,
+                    posts[i + 1].x,
+                    posts[i + 1].y - 28.0f
+                );
+            }
+
+            // Lower plank.
+            if ((group + i) % 3 != 2)
+            {
+                SDL_RenderLine(
+                    renderer,
+                    posts[i].x,
+                    posts[i].y - 15.0f,
+                    posts[i + 1].x,
+                    posts[i + 1].y - 15.0f
+                );
+            }
+        }
+
+        // =====================================
+        // CROOKED FENCE POSTS
+        // =====================================
+
+        SDL_SetRenderDrawColor(
+            renderer, 52, 38, 34, 255);
+
+        for (int i = 0; i < 4; ++i)
+        {
+            float postHeight =
+                32.0f + (i % 2) * 7.0f;
+
+            float lean =
+                (i % 2 == 0) ? -4.0f : 3.0f;
+
+            for (int thickness = -2;
+                thickness <= 2;
+                ++thickness)
+            {
+                SDL_RenderLine(
+                    renderer,
+                    posts[i].x + thickness,
+                    posts[i].y,
+                    posts[i].x + lean + thickness,
+                    posts[i].y - postHeight
+                );
+            }
+        }
+    }
+}
+
+
+void DrawDeadTrees(
+    SDL_Renderer* renderer,
+    float cameraX,
+    const std::vector<TerrainSegment>& terrainSegments)
+{
+
+    const float treePositions[] =
+    {
+        12.0f, 34.0f, 56.0f, 78.0f,
+        103.0f, 125.0f, 148.0f,
+        174.0f, 196.0f, 220.0f,
+        244.0f, 266.0f, 288.0f,
+        307.0f
+    };
+
+
+    for (float worldX : treePositions)
+    {
+        for (const TerrainSegment& segment : terrainSegments)
+        {
+            float minX = std::min(segment.start.x, segment.end.x);
+            float maxX = std::max(segment.start.x, segment.end.x);
+
+            if (worldX < minX || worldX > maxX)
+                continue;
+
+            float dx = segment.end.x - segment.start.x;
+
+            if (std::fabs(dx) < 0.001f)
+                continue;
+
+            float t = (worldX - segment.start.x) / dx;
+
+            float worldY =
+                segment.start.y +
+                (segment.end.y - segment.start.y) * t;
+
+            float x =
+                CAMERA_TARGET_X +
+                (worldX - cameraX) * PIXELS_PER_METER;
+
+            float y =
+                SCREEN_CENTER_Y - worldY * PIXELS_PER_METER;
+
+            if (x < -100.0f || x > SCREEN_WIDTH + 100.0f)
+                break;
+
+            // Dark tree silhouette.
+            SDL_SetRenderDrawColor(
+                renderer, 13, 16, 31, 255
+            );
+
+            // Main trunk, slightly crooked.
+            for (int i = -3; i <= 3; ++i)
+            {
+                SDL_RenderLine(
+                    renderer,
+                    x + i, y,
+                    x - 9.0f + i, y - 48.0f
+                );
+
+                SDL_RenderLine(
+                    renderer,
+                    x - 9.0f + i, y - 48.0f,
+                    x + 3.0f + i, y - 100.0f
+                );
+            }
+
+            // Left branches.
+            SDL_RenderLine(renderer,
+                x - 9, y - 52,
+                x - 37, y - 74);
+
+            SDL_RenderLine(renderer,
+                x - 37, y - 74,
+                x - 53, y - 102);
+
+            SDL_RenderLine(renderer,
+                x - 37, y - 74,
+                x - 67, y - 80);
+
+            // Right branches.
+            SDL_RenderLine(renderer,
+                x - 3, y - 70,
+                x + 29, y - 93);
+
+            SDL_RenderLine(renderer,
+                x + 29, y - 93,
+                x + 52, y - 121);
+
+            SDL_RenderLine(renderer,
+                x + 29, y - 93,
+                x + 63, y - 95);
+
+            // Higher twisted branches.
+            SDL_RenderLine(renderer,
+                x + 3, y - 100,
+                x - 18, y - 126);
+
+            SDL_RenderLine(renderer,
+                x + 3, y - 100,
+                x + 15, y - 132);
+
+            break;
+        }
+    }
+}
+
+
+
+void DrawGraveyardProps(
+    SDL_Renderer* renderer,
+    float cameraX,
+    const std::vector<TerrainSegment>& terrainSegments)
+{
+    // World positions of our gravestones.
+    const float gravePositions[] =
+    {
+        22.0f, 61.0f, 97.0f,
+        161.0f, 199.0f, 263.0f,
+        301.0f
+    };
+
+    for (float worldX : gravePositions)
+    {
+        // Find the ground height at this location.
+        for (const TerrainSegment& segment : terrainSegments)
+        {
+            if (worldX < segment.start.x ||
+                worldX > segment.end.x)
+            {
+                continue;
+            }
+
+            float t =
+                (worldX - segment.start.x) /
+                (segment.end.x - segment.start.x);
+
+            float worldY =
+                segment.start.y +
+                (segment.end.y - segment.start.y) * t;
+
+            // Convert Box2D coordinates to screen.
+            float x =
+                CAMERA_TARGET_X +
+                (worldX - cameraX) * PIXELS_PER_METER;
+
+            float y =
+                SCREEN_CENTER_Y -
+                worldY * PIXELS_PER_METER;
+
+            // Don't draw off-screen props.
+            if (x < -60.0f || x > SCREEN_WIDTH + 60.0f)
+                break;
+
+            // Dark outline.
+            SDL_SetRenderDrawColor(
+                renderer, 16, 19, 32, 255
+            );
+
+            SDL_FRect outline =
+            {
+                x - 16.0f,
+                y - 42.0f,
+                32.0f,
+                42.0f
+            };
+
+            SDL_RenderFillRect(renderer, &outline);
+
+            // Stone body.
+            SDL_SetRenderDrawColor(
+                renderer, 78, 85, 105, 255
+            );
+
+            SDL_FRect stone =
+            {
+                x - 12.0f,
+                y - 38.0f,
+                24.0f,
+                35.0f
+            };
+
+            SDL_RenderFillRect(renderer, &stone);
+
+            // Rounded-looking top.
+            SDL_FRect stoneTop =
+            {
+                x - 8.0f,
+                y - 44.0f,
+                16.0f,
+                10.0f
+            };
+
+            SDL_RenderFillRect(renderer, &stoneTop);
+
+            // Engraved cross.
+            SDL_SetRenderDrawColor(
+                renderer, 35, 40, 57, 255
+            );
+
+            SDL_FRect vertical =
+            {
+                x - 2.0f,
+                y - 32.0f,
+                4.0f,
+                20.0f
+            };
+
+            SDL_FRect horizontal =
+            {
+                x - 8.0f,
+                y - 26.0f,
+                16.0f,
+                4.0f
+            };
+
+            SDL_RenderFillRect(renderer, &vertical);
+            SDL_RenderFillRect(renderer, &horizontal);
+
+            break;
+        }
+    }
+}
+
 
 void DrawWheelSprite(
     SDL_Renderer* renderer,
@@ -1757,120 +2329,124 @@ void DrawRacePositionBadge(
 }
 
 
-void DrawGhostRewardUI(
+void DrawLevelSelect(
     SDL_Renderer* renderer,
     TTF_Font* font,
-    const GhostProgression& progress,
-    bool levelComplete,
-    int finishPlace)
+    TTF_Font* titleFont)
 {
-    if (!levelComplete || !font)
-        return;
-
-    SDL_SetRenderDrawBlendMode(
-        renderer,
-        SDL_BLENDMODE_BLEND
-    );
-
+    // Background
     SDL_SetRenderDrawColor(
-        renderer, 20, 29, 43, 255
+        renderer, 13, 22, 36, 255
+    );
+    SDL_RenderClear(renderer);
+
+    const SDL_Color white = { 245, 245, 245, 255 };
+    const SDL_Color muted = { 148, 162, 177, 255 };
+    const SDL_Color yellow = { 240, 255, 40, 255 };
+
+    // Header
+    DrawText(
+        renderer, titleFont,
+        "TORQRIFT",
+        65, 25, white
     );
 
-    SDL_FRect panel =
+    DrawText(
+        renderer, font,
+        "10 TRACKS. INCREASINGLY BAD IDEAS.",
+        65, 95, yellow
+    );
+
+    // Ten level cards
+    for (int i = 0; i < 10; ++i)
     {
-        0.0f, 628.0f,
-        1280.0f, 92.0f
-    };
+        int column = i % 5;
+        int row = i / 5;
 
-    SDL_RenderFillRect(renderer, &panel);
+        float x = 70.0f + column * 229.0f;
+        float y = 160.0f + row * 200.0f;
 
-    SDL_Color gold =
-    { 255, 210, 85, 255 };
+        bool unlocked = (i == 0);
 
-    SDL_Color white =
-    { 245, 245, 245, 255 };
-
-    SDL_Color green =
-    { 110, 255, 150, 255 };
-
-    if (finishPlace > 2 &&
-        !progress.levelOneTrophy)
-    {
-        DrawText(
-            renderer, font,
-            "FINISH 1ST OR 2ND TO UNLOCK A GHOST COLOR",
-            50, 646, gold
-        );
-
-        DrawText(
-            renderer, font,
-            "PRESS R TO RACE AGAIN",
-            50, 683, white
-        );
-
-        return;
-    }
-
-    if (!progress.levelOneTrophy)
-    {
-        DrawText(
-            renderer, font,
-            "VICTORY! TROPHY + ONE COLOR REWARD",
-            50, 640, gold
-        );
-
-        DrawText(
-            renderer, font,
-            "CLAIM: 1 CYAN  |  2 GREEN  |  3 PURPLE",
-            50, 678, white
-        );
-
-        return;
-    }
-
-    std::string inventory = "OWNED: WHITE";
-
-    for (int i = 1; i < 4; ++i)
-    {
-        if (progress.unlocked[i])
+        SDL_FRect card =
         {
-            inventory += " / ";
-            inventory += GetGhostColorName(i);
+            x, y, 202.0f, 165.0f
+        };
+
+        if (unlocked)
+        {
+            SDL_SetRenderDrawColor(
+                renderer, 46, 76, 67, 255
+            );
         }
+        else
+        {
+            SDL_SetRenderDrawColor(
+                renderer, 34, 42, 56, 255
+            );
+        }
+
+        SDL_RenderFillRect(renderer, &card);
+
+        // Card border
+        if (unlocked)
+        {
+            SDL_SetRenderDrawColor(
+                renderer, 240, 255, 40, 255
+            );
+        }
+        else
+        {
+            SDL_SetRenderDrawColor(
+                renderer, 79, 88, 101, 255
+            );
+        }
+
+        SDL_RenderRect(renderer, &card);
+
+        char levelNumber[16];
+
+        SDL_snprintf(
+            levelNumber,
+            sizeof(levelNumber),
+            "%02d", i + 1
+        );
+
+        DrawText(
+            renderer, titleFont,
+            levelNumber,
+            x + 18, y + 12,
+            unlocked ? yellow : muted
+        );
+
+        DrawText(
+            renderer, font,
+            unlocked ? "HAUNTED RUN" : "LOCKED",
+            x + 14, y + 92,
+            unlocked ? white : muted
+        );
+
+        DrawText(
+            renderer, font,
+            unlocked ? "THE DEAD RIDE FASTER." : "COMING SOON",
+            x + 14, y + 128,
+            unlocked ? yellow : muted
+        );
     }
 
     DrawText(
         renderer, font,
-        "TROPHY UNLOCKED!",
-        50, 636, gold
+        "MORE HILLS. MORE CRASHES. SAME BAD DECISIONS.",
+        70, 585, white
     );
 
     DrawText(
         renderer, font,
-        inventory.c_str(),
-        50, 668, white
-    );
-
-    std::string equipped =
-        "EQUIPPED: ";
-
-    equipped +=
-        GetGhostColorName(
-            progress.equippedColor
-        );
-
-    DrawText(
-        renderer, font,
-        equipped.c_str(),
-        755, 636, green
-    );
-
-    DrawText(
-        renderer, font,
-        "0 WHITE  /  1 CYAN  /  2 GREEN  /  3 PURPLE",
-        755, 675, white
+        "ENTER - PLAY LEVEL 1",
+        70, 640, yellow
     );
 }
+
 
 
 void DrawRaceResults(
@@ -2450,8 +3026,7 @@ void Render(
     int playerRacePosition,
     const ParticleSystem& particleSystem,
     float countdownTimer,
-    bool raceStarted,
-    const GhostProgression& progression)
+    bool raceStarted)
 
 {
 
@@ -2470,9 +3045,7 @@ void Render(
 
     environment.SetTerrainDrawColor(
         renderer,
-        120,
-        75,
-        35
+        83, 70, 76
     );
 
     SDL_FRect visualGround =
@@ -2499,9 +3072,7 @@ void Render(
 
     environment.SetTerrainDrawColor(
         renderer,
-        145,
-        92,
-        45
+        112, 94, 91
     );
 
     SDL_RenderFillRect(
@@ -2521,9 +3092,7 @@ void Render(
 
     environment.SetTerrainDrawColor(
         renderer,
-        120,
-        72,
-        35
+        94, 77, 82
     );
 
     SDL_RenderFillRect(
@@ -2571,9 +3140,7 @@ void Render(
 
         environment.SetTerrainDrawColor(
             renderer,
-            120,
-            75,
-            35
+            83, 70, 76
         );
 
 
@@ -2623,9 +3190,7 @@ void Render(
                 // so the hill visually becomes part of the ground.
                 environment.SetTerrainDrawColor(
                     renderer,
-                    95,
-                    55,
-                    30
+                    67, 58, 69
                 );
 
                 SDL_RenderLine(
@@ -2645,9 +3210,7 @@ void Render(
 
                 environment.SetTerrainDrawColor(
                     renderer,
-                    125,
-                    75,
-                    38
+                    92, 76, 83
                 );
 
                 SDL_RenderLine(
@@ -2667,9 +3230,7 @@ void Render(
 
                 environment.SetTerrainDrawColor(
                     renderer,
-                    155,
-                    100,
-                    50
+                    119, 98, 94
                 );
 
                 SDL_RenderLine(
@@ -2691,9 +3252,7 @@ void Render(
         // Dark grass shadow.
         environment.SetTerrainDrawColor(
             renderer,
-            35,
-            110,
-            45
+            66, 70, 58
         );
 
         SDL_RenderLine(
@@ -2708,9 +3267,7 @@ void Render(
         // Bright grass surface.
         environment.SetTerrainDrawColor(
             renderer,
-            70,
-            180,
-            75
+            139, 131, 92
         );
 
         for (int thickness = -1;
@@ -2752,9 +3309,7 @@ void Render(
 
             environment.SetTerrainDrawColor(
                 renderer,
-                45,
-                135,
-                50
+                109, 107, 80
             );
 
             // Add several small grass clumps.
@@ -2819,9 +3374,7 @@ void Render(
 
     environment.SetTerrainDrawColor(
         renderer,
-        60,
-        160,
-        70
+        129, 123, 88
     );
 
     for (int thickness = 0;
@@ -2843,9 +3396,7 @@ void Render(
 
     environment.SetTerrainDrawColor(
         renderer,
-        45,
-        135,
-        50
+        109, 107, 80
     );
 
     int grassIndex = 0;
@@ -2884,6 +3435,41 @@ void Render(
             grassY - grassHeight
         );
     }
+
+
+    DrawGroundFog(
+        renderer,
+        cameraX,
+        terrainSegments
+    );
+
+    DrawHauntedLanterns(
+        renderer,
+        cameraX,
+        terrainSegments
+    );
+
+
+
+
+    DrawBrokenFences(
+        renderer,
+        cameraX,
+        terrainSegments
+    );
+
+    DrawDeadTrees(
+        renderer,
+        cameraX,
+        terrainSegments
+    );
+
+    DrawGraveyardProps(
+        renderer,
+        cameraX,
+        terrainSegments
+    );
+
 
         // =====================================================
         // FINISH LINE
@@ -3146,33 +3732,19 @@ void Render(
         artAxleAngleDegrees;
 
 
+    // ============================================
+    // PLAYER RIDER - GHOST CHASSIS
+    // ============================================
 
-    if (progression.equippedColor == 0)
-    {
-        // Original white Ghost.
-        SDL_RenderTextureRotated(
-            renderer,
-            bikeTexture,
-            nullptr,
-            &bikeRect,
-            bikeVisualAngle,
-            &bikePivot,
-            SDL_FLIP_NONE
-        );
-    }
-    else
-    {
-        // Use the unlocked AI color artwork.
-        const RacerVisual& equippedVisual =
-            aiVisuals[progression.equippedColor - 1];
-
-        DrawBikeSprite(
-            renderer,
-            equippedVisual,
-            rearWheelScreen,
-            frontWheelScreen
-        );
-    }
+    SDL_RenderTextureRotated(
+        renderer,
+        bikeTexture,
+        nullptr,
+        &bikeRect,
+        bikeVisualAngle,
+        &bikePivot,
+        SDL_FLIP_NONE
+    );
 
 
 
@@ -3189,7 +3761,7 @@ void Render(
     // around the wheel PNG.
 
     constexpr float WHEEL_VISUAL_SCALE =
-        1.55f;
+        1.80f;
 
     float wheelSize =
         BIKE_WHEEL_RADIUS *
@@ -3232,6 +3804,12 @@ void Render(
     };
 
 
+    // Temporary visual alignment adjustment
+    constexpr float FIRE_WHEEL_Y_OFFSET = 8.0f;
+
+    rearWheelRect.y += FIRE_WHEEL_Y_OFFSET;
+    frontWheelRect.y += FIRE_WHEEL_Y_OFFSET;
+
     // -----------------------------------------------------
     // WHEEL ROTATION
     // -----------------------------------------------------
@@ -3252,55 +3830,79 @@ void Render(
         ) * RAD_TO_DEG;
 
 
-    // -----------------------------------------------------
-    // DRAW WHEELS
-    // -----------------------------------------------------
 
+    
+        // ============================================
+        // ANIMATED GHOST FIRE WHEELS
+        // ============================================
 
-    if (progression.equippedColor == 0)
-    {
-        // Original white wheels.
-        SDL_RenderTextureRotated(
+        constexpr int FRAME_COUNT = 8;
+        constexpr float FRAME_SIZE = 256.0f;
+
+        // Remember animation progress between frames.
+        static float flameFramePosition = 0.0f;
+        static Uint64 lastFlameTick = SDL_GetTicksNS();
+
+        Uint64 currentFlameTick = SDL_GetTicksNS();
+
+        float animationDeltaTime =
+            static_cast<float>(
+                currentFlameTick - lastFlameTick
+                ) / 1000000000.0f;
+
+        lastFlameTick = currentFlameTick;
+
+        // Avoid huge jumps after pauses.
+        animationDeltaTime =
+            std::min(animationDeltaTime, 0.05f);
+
+        // Read actual Box2D horizontal speed.
+        float speed = std::fabs(
+            b2Body_GetLinearVelocity(
+                chassisBodyId
+            ).x
+        );
+
+        // Flames animate faster when riding faster.
+        float framesPerSecond =
+            5.0f + std::min(speed, 15.0f) * 0.8f;
+
+        if (boostActive)
+        {
+            framesPerSecond = 24.0f;
+        }
+
+        flameFramePosition +=
+            animationDeltaTime * framesPerSecond;
+
+        int frameIndex =
+            static_cast<int>(flameFramePosition)
+            % FRAME_COUNT;
+
+        // Select one frame from the spritesheet.
+        SDL_FRect sourceRect =
+        {
+            frameIndex * FRAME_SIZE,
+            0.0f,
+            FRAME_SIZE,
+            FRAME_SIZE
+        };
+
+        // Rear flame wheel.
+        SDL_RenderTexture(
             renderer,
             wheelTexture,
-            nullptr,
-            &rearWheelRect,
-            rearWheelAngle,
-            nullptr,
-            SDL_FLIP_NONE
+            &sourceRect,
+            &rearWheelRect
         );
 
-        SDL_RenderTextureRotated(
+        // Front flame wheel.
+        SDL_RenderTexture(
             renderer,
             wheelTexture,
-            nullptr,
-            &frontWheelRect,
-            frontWheelAngle,
-            nullptr,
-            SDL_FLIP_NONE
+            &sourceRect,
+            &frontWheelRect
         );
-    }
-    else
-    {
-        const RacerVisual& equippedVisual =
-            aiVisuals[progression.equippedColor - 1];
-
-        DrawWheelSprite(
-            renderer,
-            equippedVisual.wheelTexture,
-            rearWheelBodyId,
-            rearWheelScreen,
-            1.55f
-        );
-
-        DrawWheelSprite(
-            renderer,
-            equippedVisual.wheelTexture,
-            frontWheelBodyId,
-            frontWheelScreen,
-            1.55f
-        );
-    }
 
 
     // =====================================================
@@ -3464,14 +4066,6 @@ void Render(
             playerRacePosition
         );
     }
-
-    DrawGhostRewardUI(
-        renderer,
-        font,
-        progression,
-        levelComplete,
-        playerRacer.finishPlace
-    );
 
 
 
@@ -3650,14 +4244,16 @@ int main(int argc, char* argv[])
     SDL_Texture* bikeTexture =
         IMG_LoadTexture(
             renderer,
-            "assets/Bike/rider_chassis_.png"
+            "assets/Bike/rider_chassis__.png"
         );
+
 
     SDL_Texture* wheelTexture =
         IMG_LoadTexture(
             renderer,
-            "assets/Bike/bike_wheel_.png"
+            "assets/Bike/fire_wheel_strip.png"
         );
+
 
     SDL_SetTextureScaleMode(
         bikeTexture,
@@ -4096,6 +4692,14 @@ int main(int argc, char* argv[])
 
     bool running = true;
 
+
+    GameScreen currentScreen = GameScreen::LevelSelect;
+
+    int selectedLevel = 1;
+
+    constexpr int MAX_LEVELS = 10;
+
+
     float cameraX = 0.0f;
 
     Uint64 previousTime =
@@ -4105,11 +4709,6 @@ int main(int argc, char* argv[])
     
     bool levelComplete = false; 
 
-    GhostProgression progression =
-        LoadGhostProgress();
-
-    std::array<bool, 4> previousColorKeys =
-    { false, false, false, false };
 
     bool checkpointReached = false;
 
@@ -4206,6 +4805,55 @@ int main(int argc, char* argv[])
         previousTime = currentTime;
 
 
+        // ============================================
+        // LEVEL SELECT SCREEN
+        // ============================================
+
+        if (currentScreen == GameScreen::LevelSelect)
+        {
+            // Handle keyboard and window events.
+            ProcessInput(running, input);
+
+            if (!running)
+                break;
+
+            const bool* keys =
+                SDL_GetKeyboardState(nullptr);
+
+            // Enter starts Level 1.
+            if (keys[SDL_SCANCODE_RETURN] ||
+                keys[SDL_SCANCODE_KP_ENTER])
+            {
+                selectedLevel = 1;
+
+                currentScreen = GameScreen::Race;
+
+                SDL_Log(
+                    "Starting Level %d",
+                    selectedLevel
+                );
+
+                continue;
+            }
+
+            // Draw our Level Select menu.
+            DrawLevelSelect(
+                renderer,
+                font,
+                stuntFont
+            );
+
+            SDL_RenderPresent(renderer);
+
+            // Prevent unnecessary CPU usage.
+            SDL_Delay(16);
+
+            // Do not run race physics in the menu.
+            continue;
+        }
+
+
+
         // ---------------------------------------------
         // STUNT POPUP TIMER
         // ---------------------------------------------
@@ -4292,77 +4940,6 @@ int main(int argc, char* argv[])
             running,
             input
         );
-
-
-        // ============================================
-        // GHOST COLOR REWARDS / INVENTORY
-        // ============================================
-
-        const bool* keys =
-            SDL_GetKeyboardState(nullptr);
-
-        const SDL_Scancode colorKeys[4] =
-        {
-            SDL_SCANCODE_0,
-            SDL_SCANCODE_1,
-            SDL_SCANCODE_2,
-            SDL_SCANCODE_3
-        };
-
-        int selectedColor = -1;
-
-        for (int i = 0; i < 4; ++i)
-        {
-            bool down = keys[colorKeys[i]];
-
-            if (down && !previousColorKeys[i])
-            {
-                selectedColor = i;
-            }
-
-            previousColorKeys[i] = down;
-        }
-
-        if (selectedColor >= 0)
-        {
-            bool canClaimReward =
-                levelComplete &&
-                playerRacer.finishPlace >= 1 &&
-                playerRacer.finishPlace <= 2 &&
-                !progression.levelOneTrophy;
-
-            if (canClaimReward &&
-                selectedColor > 0)
-            {
-                // Claim one AI color from Level 1.
-                progression.unlocked[selectedColor] =
-                    true;
-
-                progression.levelOneTrophy = true;
-
-                progression.equippedColor =
-                    selectedColor;
-
-                SaveGhostProgress(progression);
-
-                SDL_Log(
-                    "TROPHY EARNED! Unlocked %s",
-                    GetGhostColorName(selectedColor)
-                );
-            }
-            else if (progression.unlocked[selectedColor])
-            {
-                // Equip an already-owned color.
-                if (progression.equippedColor !=
-                    selectedColor)
-                {
-                    progression.equippedColor =
-                        selectedColor;
-
-                    SaveGhostProgress(progression);
-                }
-            }
-        }
 
 
 
@@ -5523,8 +6100,7 @@ int main(int argc, char* argv[])
             playerRacer.currentPosition,
             particleSystem,
             countdownTimer,
-            raceStarted,
-            progression
+            raceStarted
         );
     }
 
