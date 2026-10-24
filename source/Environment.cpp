@@ -135,21 +135,17 @@ Environment::Environment()
     // NIGHT
     // =====================================================
 
+
     nightTheme.skyColor =
     {
-        25,
-        35,
-        75,
-        255
+        15, 19, 49, 255
     };
 
     nightTheme.cloudColor =
     {
-        80,
-        90,
-        120,
-        100
+        76, 79, 130, 110
     };
+
 
 
     nightTheme.farHillColor =
@@ -453,17 +449,9 @@ void Environment::RenderMoon(
     SDL_Renderer* renderer
 ) const
 {
-    if (playerX < 200.0f)
-    {
-        return;
-    }
 
+    float moonFade = 1.0f;
 
-    float moonFade =
-        Clamp01(
-            (playerX - 200.0f) /
-            70.0f
-        );
 
 
     SDL_Color moonColor =
@@ -527,17 +515,9 @@ void Environment::RenderStars(
     SDL_Renderer* renderer
 ) const
 {
-    if (playerX < 190.0f)
-    {
-        return;
-    }
 
+    float starFade = 1.0f;
 
-    float starFade =
-        Clamp01(
-            (playerX - 190.0f) /
-            80.0f
-        );
 
 
     SDL_Color starColor =
@@ -622,168 +602,294 @@ void Environment::RenderStars(
 // GET CURRENT THEME
 // ---------------------------------------------------------
 
+
 Environment::EnvironmentTheme
 Environment::GetCurrentTheme() const
 {
-    EnvironmentTheme currentTheme =
-        dayTheme;
+    // Level 1 - Haunted Run
+    // The entire race takes place at night.
+
+    return nightTheme;
+}
 
 
-    // =====================================================
-    // DAY -> SUNSET
-    // =====================================================
+static void DrawHauntedBats(
+    SDL_Renderer* renderer,
+    float cameraX,
+    float animationTime)
+{
+    // Same parallax as the haunted mansion.
+    const float mansionX = 850.0f - cameraX * 5.0f;
 
-    if (playerX >= 70.0f &&
-        playerX < 140.0f)
+    // Each bat has a different position and movement phase.
+    const SDL_FPoint batPositions[] =
     {
-        float blend =
-            (playerX - 70.0f) /
-            (140.0f - 70.0f);
+        {  30.0f, 185.0f },
+        { 100.0f, 145.0f },
+        { 180.0f, 175.0f },
+        { 250.0f, 125.0f },
+        { 310.0f, 195.0f },
+        { 360.0f, 155.0f }
+    };
 
+    SDL_SetRenderDrawColor(
+        renderer, 10, 12, 27, 255
+    );
 
-        currentTheme.skyColor =
-            LerpColor(
-                dayTheme.skyColor,
-                sunsetTheme.skyColor,
-                blend
+    for (int i = 0; i < 6; ++i)
+    {
+        float phase = animationTime * 5.0f + i * 1.4f;
+
+        float x =
+            mansionX + batPositions[i].x +
+            std::sin(animationTime * 0.8f + i) * 18.0f;
+
+        float y =
+            batPositions[i].y +
+            std::sin(animationTime * 1.3f + i) * 9.0f;
+
+        if (x < -40.0f || x > 1320.0f)
+            continue;
+
+        // Wing flap animation.
+        float flap = std::sin(phase) * 8.0f;
+
+        float size = 0.8f + (i % 3) * 0.2f;
+
+        // Bat body.
+        SDL_FRect body =
+        {
+            x - 3.0f * size,
+            y - 3.0f * size,
+            6.0f * size,
+            7.0f * size
+        };
+
+        SDL_RenderFillRect(renderer, &body);
+
+        // Left wing.
+        SDL_RenderLine(
+            renderer,
+            x, y,
+            x - 12.0f * size,
+            y - flap
+        );
+
+        SDL_RenderLine(
+            renderer,
+            x - 12.0f * size,
+            y - flap,
+            x - 22.0f * size,
+            y + flap * 0.4f
+        );
+
+        // Right wing.
+        SDL_RenderLine(
+            renderer,
+            x, y,
+            x + 12.0f * size,
+            y - flap
+        );
+
+        SDL_RenderLine(
+            renderer,
+            x + 12.0f * size,
+            y - flap,
+            x + 22.0f * size,
+            y + flap * 0.4f
+        );
+    }
+}
+
+static void DrawHauntedMansion(
+    SDL_Renderer* renderer,
+    float cameraX)
+{
+    // The mansion moves slowly with the camera.
+    // This makes it appear far away.
+    const float x = 850.0f - cameraX * 5.0f;
+    const float y = 255.0f;
+
+    // Skip drawing when completely off-screen.
+    if (x > 1400.0f || x < -350.0f)
+        return;
+
+    auto FillBox = [&](float px, float py,
+        float w, float h,
+        Uint8 r, Uint8 g, Uint8 b)
+        {
+            SDL_SetRenderDrawColor(
+                renderer, r, g, b, 255
             );
 
-        currentTheme.cloudColor =
-            LerpColor(
-                dayTheme.cloudColor,
-                sunsetTheme.cloudColor,
-                blend
+            SDL_FRect rect = { px, py, w, h };
+            SDL_RenderFillRect(renderer, &rect);
+        };
+
+    auto Roof = [&](float left, float top,
+        float width, float height)
+        {
+            SDL_Vertex vertices[3]{};
+
+            vertices[0].position =
+            { left + width / 2.0f, top };
+
+            vertices[1].position =
+            { left, top + height };
+
+            vertices[2].position =
+            { left + width, top + height };
+
+            const SDL_FColor color =
+            { 0.035f, 0.045f, 0.085f, 1.0f };
+
+            for (SDL_Vertex& vertex : vertices)
+                vertex.color = color;
+
+            const int indices[] = { 0, 1, 2 };
+
+            SDL_RenderGeometry(
+                renderer, nullptr,
+                vertices, 3, indices, 3
             );
+        };
 
 
-        currentTheme.farHillColor =
-            LerpColor(
-                dayTheme.farHillColor,
-                sunsetTheme.farHillColor,
-                blend
-            );
+    // ============================================
+    // HAUNTED MANSION CLIFF
+    // ============================================
 
-        currentTheme.farMountainColor =
-            LerpColor(
-                dayTheme.farMountainColor,
-                sunsetTheme.farMountainColor,
-                blend
-            );
+    SDL_Vertex cliff[6]{};
 
+    // Left slope
+    cliff[0].position =
+    { x - 95.0f, y + 340.0f };
 
-        currentTheme.nearMountainColor =
-            LerpColor(
-                dayTheme.nearMountainColor,
-                sunsetTheme.nearMountainColor,
-                blend
-            );
+    // Top-left edge beneath the mansion
+    cliff[1].position =
+    { x + 10.0f, y + 245.0f };
 
-        currentTheme.foregroundColor =
-            LerpColor(
-                dayTheme.foregroundColor,
-                sunsetTheme.foregroundColor,
-                blend
-            );
+    // Top-right edge beneath the mansion
+    cliff[2].position =
+    { x + 275.0f, y + 245.0f };
 
-        currentTheme.terrainTint =
-            LerpColor(
-                dayTheme.terrainTint,
-                sunsetTheme.terrainTint,
-                blend
-            );
+    // Right slope
+    cliff[3].position =
+    { x + 380.0f, y + 340.0f };
+
+    // Bottom-right
+    cliff[4].position =
+    { x + 380.0f, 760.0f };
+
+    // Bottom-left
+    cliff[5].position =
+    { x - 95.0f, 760.0f };
+
+    const SDL_FColor cliffColor =
+    {
+        0.075f,
+        0.095f,
+        0.16f,
+        1.0f
+    };
+
+    for (SDL_Vertex& vertex : cliff)
+    {
+        vertex.color = cliffColor;
     }
 
-
-
-    // =====================================================
-    // SUNSET
-    // =====================================================
-
-    else if (playerX >= 140.0f &&
-        playerX < 200.0f)
+    const int cliffIndices[] =
     {
-        currentTheme =
-            sunsetTheme;
-    }
+        0, 1, 2,
+        0, 2, 3,
+        0, 3, 4,
+        0, 4, 5
+    };
+
+    SDL_RenderGeometry(
+        renderer,
+        nullptr,
+        cliff,
+        6,
+        cliffIndices,
+        12
+    );
 
 
-    // =====================================================
-    // SUNSET -> NIGHT
-    // =====================================================
+    // ============================================
+    // MAIN BUILDING
+    // ============================================
 
-    else if (playerX >= 200.0f &&
-        playerX < 270.0f)
-    {
-        float blend =
-            (playerX - 200.0f) /
-            (270.0f - 200.0f);
+    FillBox(x + 65, y + 115,
+        150, 130, 19, 22, 43);
 
+    Roof(x + 55, y + 75, 170, 60);
 
-        currentTheme.skyColor =
-            LerpColor(
-                sunsetTheme.skyColor,
-                nightTheme.skyColor,
-                blend
-            );
+    // ============================================
+    // LEFT TOWER
+    // ============================================
 
-        currentTheme.cloudColor =
-            LerpColor(
-                sunsetTheme.cloudColor,
-                nightTheme.cloudColor,
-                blend
-            );
+    FillBox(x + 22, y + 85,
+        55, 160, 16, 20, 39);
 
+    Roof(x + 12, y + 20, 75, 75);
 
-        currentTheme.farHillColor =
-            LerpColor(
-                sunsetTheme.farHillColor,
-                nightTheme.farHillColor,
-                blend
-            );
+    // ============================================
+    // RIGHT TOWER
+    // ============================================
 
-        currentTheme.farMountainColor =
-            LerpColor(
-                sunsetTheme.farMountainColor,
-                nightTheme.farMountainColor,
-                blend
-            );
+    FillBox(x + 205, y + 65,
+        52, 180, 16, 20, 39);
 
+    Roof(x + 195, y + 0, 72, 75);
 
-        currentTheme.nearMountainColor =
-            LerpColor(
-                sunsetTheme.nearMountainColor,
-                nightTheme.nearMountainColor,
-                blend
-            );
+    // ============================================
+    // GLOWING WINDOWS
+    // ============================================
 
-        currentTheme.foregroundColor =
-            LerpColor(
-                sunsetTheme.foregroundColor,
-                nightTheme.foregroundColor,
-                blend
-            );
+    // Dark window frames
+    FillBox(x + 36, y + 125,
+        22, 43, 5, 8, 20);
 
-        currentTheme.terrainTint =
-            LerpColor(
-                sunsetTheme.terrainTint,
-                nightTheme.terrainTint,
-                blend
-            );
-    }
+    FillBox(x + 220, y + 105,
+        22, 43, 5, 8, 20);
 
+    FillBox(x + 100, y + 155,
+        25, 40, 5, 8, 20);
 
-    // =====================================================
-    // NIGHT
-    // =====================================================
+    FillBox(x + 158, y + 155,
+        25, 40, 5, 8, 20);
 
-    else if (playerX >= 270.0f)
-    {
-        currentTheme =
-            nightTheme;
-    }
+    // Warm orange interiors
+    FillBox(x + 40, y + 130,
+        14, 34, 255, 153, 48);
 
+    FillBox(x + 224, y + 110,
+        14, 34, 255, 153, 48);
 
-    return currentTheme;
+    FillBox(x + 105, y + 160,
+        15, 30, 255, 180, 69);
+
+    FillBox(x + 163, y + 160,
+        15, 30, 255, 180, 69);
+
+    // Window crossbars
+    FillBox(x + 105, y + 174,
+        15, 3, 27, 22, 34);
+
+    FillBox(x + 163, y + 174,
+        15, 3, 27, 22, 34);
+
+    // ============================================
+    // FRONT DOOR
+    // ============================================
+
+    FillBox(x + 127, y + 205,
+        30, 40, 8, 10, 24);
+
+    // Small door handle
+    FillBox(x + 149, y + 225,
+        4, 4, 210, 155, 72);
 }
 
 
@@ -821,21 +927,16 @@ void Environment::Render(
     // SKY OBJECTS
     // =====================================================
 
-    RenderStars(
-        renderer
-    );
 
-    RenderSun(
-        renderer
-    );
+    RenderStars(renderer);
 
-    RenderMoonGlow(
-        renderer
-    );
+    // The haunted level never shows the sun.
+    // RenderSun(renderer);
 
-    RenderMoon(
-        renderer
-    );
+    RenderMoonGlow(renderer);
+
+    RenderMoon(renderer);
+
 
 
     // =====================================================
@@ -1098,6 +1199,23 @@ void Environment::Render(
         nearMountainIndices,
         9
     );
+
+
+    DrawHauntedBats(
+        renderer,
+        cameraX,
+        animationTime
+    );
+
+    // ============================================
+    // HAUNTED MANSION - BACKGROUND
+    // ============================================
+
+    DrawHauntedMansion(
+        renderer,
+        cameraX
+    );
+
 
     // =====================================================
     // FOREGROUND SCENERY
@@ -1743,17 +1861,9 @@ void Environment::RenderMoonGlow(
     SDL_Renderer* renderer
 ) const
 {
-    if (playerX < 190.0f)
-    {
-        return;
-    }
 
+    float fade = 1.0f;
 
-    float fade =
-        Clamp01(
-            (playerX - 190.0f) /
-            80.0f
-        );
 
 
     const float moonX =

@@ -14,8 +14,6 @@
 #include "AIController.h"
 #include "Racer.h"
 #include <string>
-#include <array>
-#include <fstream>
 
 // ---------------------------------------------------------
 // CONSTANTS
@@ -42,76 +40,17 @@ constexpr float COMBO_WINDOW = 3.0f;
 
 
 
-struct GhostProgression
+enum class GameScreen
 {
-    // 0 = White, 1 = Cyan, 2 = Green, 3 = Purple
-    std::array<bool, 4> unlocked =
-    { true, false, false, false };
-
-    int equippedColor = 0;
-
-    bool levelOneTrophy = false;
+    MainMenu,
+    LevelSelect,
+    RiderSelect,
+    Garage,
+    Achievements,
+    Controls,
+    Race,
+    Pause
 };
-
-const char* GetGhostColorName(int color)
-{
-    switch (color)
-    {
-    case 1: return "CYAN";
-    case 2: return "GREEN";
-    case 3: return "PURPLE";
-    default: return "WHITE";
-    }
-}
-
-void SaveGhostProgress(const GhostProgression& p)
-{
-    std::ofstream file("torqrift_progress.txt");
-
-    if (!file)
-    {
-        SDL_Log("Could not save Ghost progression");
-        return;
-    }
-
-    file << p.levelOneTrophy << ' '
-        << p.equippedColor << ' '
-        << p.unlocked[1] << ' '
-        << p.unlocked[2] << ' '
-        << p.unlocked[3];
-}
-
-GhostProgression LoadGhostProgress()
-{
-    GhostProgression p;
-
-    std::ifstream file("torqrift_progress.txt");
-
-    int trophy = 0;
-    int equipped = 0;
-    int cyan = 0;
-    int green = 0;
-    int purple = 0;
-
-    if (file >> trophy >> equipped
-        >> cyan >> green >> purple)
-    {
-        p.levelOneTrophy = (trophy != 0);
-
-        p.unlocked[1] = (cyan != 0);
-        p.unlocked[2] = (green != 0);
-        p.unlocked[3] = (purple != 0);
-
-        if (equipped >= 0 &&
-            equipped < 4 &&
-            p.unlocked[equipped])
-        {
-            p.equippedColor = equipped;
-        }
-    }
-
-    return p;
-}
 
 
 void ProcessInput(
@@ -1153,7 +1092,7 @@ void DrawCheckpoint(
 
     const float checkpointGroundY =
         SCREEN_CENTER_Y -
-        (-4.0f * PIXELS_PER_METER);
+        (-9.0f * PIXELS_PER_METER);
 
     // Yellow before reaching it, green afterwards.
     if (checkpointReached)
@@ -1204,6 +1143,644 @@ void DrawCheckpoint(
         &flag
     );
 }
+
+
+void DrawGroundFog(
+    SDL_Renderer* renderer,
+    float cameraX,
+    const std::vector<TerrainSegment>& terrainSegments)
+{
+   
+
+    const float time =
+        static_cast<float>(SDL_GetTicksNS()) /
+        1000000000.0f;
+
+    constexpr int SEGMENTS = 16;
+    constexpr float TWO_PI = 6.2831853f;
+
+    SDL_SetRenderDrawBlendMode(
+        renderer, SDL_BLENDMODE_BLEND
+    );
+
+
+    for (float worldX = 0.0f;
+        worldX <= FINISH_X;
+        worldX += 10.0f)
+
+    {
+        float groundY = 0.0f;
+        bool foundGround = false;
+
+        // Find the height of the track.
+        for (const TerrainSegment& segment : terrainSegments)
+        {
+            float dx = segment.end.x - segment.start.x;
+
+            if (std::fabs(dx) < 0.001f)
+                continue;
+
+            float t = (worldX - segment.start.x) / dx;
+
+            if (t >= 0.0f && t <= 1.0f)
+            {
+                groundY =
+                    segment.start.y +
+                    (segment.end.y - segment.start.y) * t;
+
+                foundGround = true;
+                break;
+            }
+        }
+
+        if (!foundGround)
+            continue;
+
+        float screenX =
+            CAMERA_TARGET_X +
+            (worldX - cameraX) * PIXELS_PER_METER;
+
+        float screenY =
+            SCREEN_CENTER_Y -
+            groundY * PIXELS_PER_METER;
+
+        if (screenX < -170.0f ||
+            screenX > SCREEN_WIDTH + 170.0f)
+            continue;
+
+        // Give each fog patch a different motion.
+        float phase = worldX * 0.17f;
+
+        float drift =
+            std::sin(time * 0.45f + phase) * 18.0f;
+
+        float breathing =
+            std::sin(time * 0.7f + phase) * 0.12f;
+
+        // Multiple overlapping wisps.
+        for (int layer = 0; layer < 3; ++layer)
+        {
+            float centerX =
+                screenX + drift + layer * 25.0f;
+
+            float centerY =
+                screenY - 12.0f - layer * 9.0f;
+
+            float radiusX =
+                65.0f + layer * 15.0f;
+
+            float radiusY =
+                12.0f + layer * 5.0f +
+                breathing * 5.0f;
+
+            SDL_Vertex vertices[SEGMENTS + 1]{};
+            int indices[SEGMENTS * 3]{};
+
+            // Soft blue-gray fog center.
+            vertices[0].position =
+            { centerX, centerY };
+
+            vertices[0].color =
+            { 0.65f, 0.74f, 0.88f, 0.16f };
+
+            // Transparent edges.
+            for (int i = 0; i < SEGMENTS; ++i)
+            {
+                float angle =
+                    TWO_PI * i / SEGMENTS;
+
+                vertices[i + 1].position =
+                {
+                    centerX + std::cos(angle) * radiusX,
+                    centerY + std::sin(angle) * radiusY
+                };
+
+                vertices[i + 1].color =
+                { 0.65f, 0.74f, 0.88f, 0.0f };
+
+                indices[i * 3] = 0;
+                indices[i * 3 + 1] = i + 1;
+                indices[i * 3 + 2] =
+                    ((i + 1) % SEGMENTS) + 1;
+            }
+
+            SDL_RenderGeometry(
+                renderer,
+                nullptr,
+                vertices,
+                SEGMENTS + 1,
+                indices,
+                SEGMENTS * 3
+            );
+        }
+    }
+}
+
+
+void DrawHauntedLanterns(
+    SDL_Renderer* renderer,
+    float cameraX,
+    const std::vector<TerrainSegment>& terrainSegments)
+{
+    const float lanternPositions[] =
+    {
+        29.0f, 85.0f, 132.0f,
+        177.0f, 225.0f, 273.0f,
+        309.0f
+    };
+
+    SDL_SetRenderDrawBlendMode(
+        renderer, SDL_BLENDMODE_BLEND
+    );
+
+    for (float worldX : lanternPositions)
+    {
+        for (const TerrainSegment& segment : terrainSegments)
+        {
+            float minX = std::min(
+                segment.start.x, segment.end.x);
+
+            float maxX = std::max(
+                segment.start.x, segment.end.x);
+
+            float dx = segment.end.x - segment.start.x;
+
+            if (worldX < minX || worldX > maxX ||
+                std::fabs(dx) < 0.001f)
+                continue;
+
+            float t =
+                (worldX - segment.start.x) / dx;
+
+            float worldY =
+                segment.start.y +
+                (segment.end.y - segment.start.y) * t;
+
+            float x = CAMERA_TARGET_X +
+                (worldX - cameraX) * PIXELS_PER_METER;
+
+            float y = SCREEN_CENTER_Y -
+                worldY * PIXELS_PER_METER;
+
+            if (x < -70.0f || x > SCREEN_WIDTH + 70.0f)
+                break;
+
+            // Soft warm glow.
+            SDL_SetRenderDrawColor(
+                renderer, 255, 148, 40, 30);
+
+            SDL_FRect outerGlow =
+            {
+                x - 28.0f, y - 94.0f,
+                56.0f, 56.0f
+            };
+
+            SDL_RenderFillRect(renderer, &outerGlow);
+
+            SDL_SetRenderDrawColor(
+                renderer, 255, 175, 60, 55);
+
+            SDL_FRect innerGlow =
+            {
+                x - 17.0f, y - 83.0f,
+                34.0f, 34.0f
+            };
+
+            SDL_RenderFillRect(renderer, &innerGlow);
+
+            // Wooden post.
+            SDL_SetRenderDrawColor(
+                renderer, 48, 34, 32, 255);
+
+            SDL_FRect post =
+            {
+                x - 3.0f, y - 70.0f,
+                6.0f, 70.0f
+            };
+
+            SDL_RenderFillRect(renderer, &post);
+
+            // Lantern frame.
+            SDL_SetRenderDrawColor(
+                renderer, 22, 20, 28, 255);
+
+            SDL_FRect frame =
+            {
+                x - 11.0f, y - 78.0f,
+                22.0f, 28.0f
+            };
+
+            SDL_RenderFillRect(renderer, &frame);
+
+            // Glowing glass.
+            SDL_SetRenderDrawColor(
+                renderer, 255, 171, 48, 255);
+
+            SDL_FRect glass =
+            {
+                x - 7.0f, y - 74.0f,
+                14.0f, 19.0f
+            };
+
+            SDL_RenderFillRect(renderer, &glass);
+
+            // Bright flame core.
+            SDL_SetRenderDrawColor(
+                renderer, 255, 237, 145, 255);
+
+            SDL_FRect flame =
+            {
+                x - 3.0f, y - 69.0f,
+                6.0f, 12.0f
+            };
+
+            SDL_RenderFillRect(renderer, &flame);
+            break;
+        }
+    }
+}
+
+
+
+void DrawBrokenFences(
+    SDL_Renderer* renderer,
+    float cameraX,
+    const std::vector<TerrainSegment>& terrainSegments)
+{
+    // Four small fence groups across the level.
+
+    const float fencePositions[] =
+    {
+        20.0f, 46.0f, 72.0f,
+        96.0f, 119.0f, 140.0f,
+        164.0f, 187.0f, 212.0f,
+        238.0f, 261.0f, 297.0f
+    };
+
+
+    // Find the terrain height at any world X.
+    auto GetGroundY = [&](float worldX, float& worldY)
+        {
+            for (const TerrainSegment& segment : terrainSegments)
+            {
+                float minX = std::min(
+                    segment.start.x, segment.end.x);
+
+                float maxX = std::max(
+                    segment.start.x, segment.end.x);
+
+                float dx = segment.end.x - segment.start.x;
+
+                if (worldX < minX || worldX > maxX ||
+                    std::fabs(dx) < 0.001f)
+                    continue;
+
+                float t = (worldX - segment.start.x) / dx;
+
+                worldY = segment.start.y +
+                    (segment.end.y - segment.start.y) * t;
+
+                return true;
+            }
+
+            return false;
+        };
+
+
+    const int fenceGroupCount =
+        static_cast<int>(
+            sizeof(fencePositions) /
+            sizeof(fencePositions[0])
+            );
+
+    for (int group = 0; group < fenceGroupCount; ++group)
+
+    {
+        SDL_FPoint posts[4]{};
+        bool valid = true;
+
+        // Four posts per fence group.
+        for (int i = 0; i < 4; ++i)
+        {
+            float worldX =
+                fencePositions[group] + i * 0.9f;
+
+            float worldY = 0.0f;
+
+            if (!GetGroundY(worldX, worldY))
+            {
+                valid = false;
+                break;
+            }
+
+            posts[i].x = CAMERA_TARGET_X +
+                (worldX - cameraX) * PIXELS_PER_METER;
+
+            posts[i].y = SCREEN_CENTER_Y -
+                worldY * PIXELS_PER_METER;
+        }
+
+        if (!valid)
+            continue;
+
+        if (posts[3].x < -100.0f ||
+            posts[0].x > SCREEN_WIDTH + 100.0f)
+            continue;
+
+        // =====================================
+        // BROKEN HORIZONTAL PLANKS
+        // =====================================
+
+        SDL_SetRenderDrawColor(
+            renderer, 83, 58, 45, 255);
+
+        for (int i = 0; i < 3; ++i)
+        {
+            // Some boards are missing.
+            bool broken =
+                (group + i) % 4 == 1;
+
+            if (!broken)
+            {
+                SDL_RenderLine(
+                    renderer,
+                    posts[i].x,
+                    posts[i].y - 28.0f,
+                    posts[i + 1].x,
+                    posts[i + 1].y - 28.0f
+                );
+            }
+
+            // Lower plank.
+            if ((group + i) % 3 != 2)
+            {
+                SDL_RenderLine(
+                    renderer,
+                    posts[i].x,
+                    posts[i].y - 15.0f,
+                    posts[i + 1].x,
+                    posts[i + 1].y - 15.0f
+                );
+            }
+        }
+
+        // =====================================
+        // CROOKED FENCE POSTS
+        // =====================================
+
+        SDL_SetRenderDrawColor(
+            renderer, 52, 38, 34, 255);
+
+        for (int i = 0; i < 4; ++i)
+        {
+            float postHeight =
+                32.0f + (i % 2) * 7.0f;
+
+            float lean =
+                (i % 2 == 0) ? -4.0f : 3.0f;
+
+            for (int thickness = -2;
+                thickness <= 2;
+                ++thickness)
+            {
+                SDL_RenderLine(
+                    renderer,
+                    posts[i].x + thickness,
+                    posts[i].y,
+                    posts[i].x + lean + thickness,
+                    posts[i].y - postHeight
+                );
+            }
+        }
+    }
+}
+
+
+void DrawDeadTrees(
+    SDL_Renderer* renderer,
+    float cameraX,
+    const std::vector<TerrainSegment>& terrainSegments)
+{
+
+    const float treePositions[] =
+    {
+        12.0f, 34.0f, 56.0f, 78.0f,
+        103.0f, 125.0f, 148.0f,
+        174.0f, 196.0f, 220.0f,
+        244.0f, 266.0f, 288.0f,
+        307.0f
+    };
+
+
+    for (float worldX : treePositions)
+    {
+        for (const TerrainSegment& segment : terrainSegments)
+        {
+            float minX = std::min(segment.start.x, segment.end.x);
+            float maxX = std::max(segment.start.x, segment.end.x);
+
+            if (worldX < minX || worldX > maxX)
+                continue;
+
+            float dx = segment.end.x - segment.start.x;
+
+            if (std::fabs(dx) < 0.001f)
+                continue;
+
+            float t = (worldX - segment.start.x) / dx;
+
+            float worldY =
+                segment.start.y +
+                (segment.end.y - segment.start.y) * t;
+
+            float x =
+                CAMERA_TARGET_X +
+                (worldX - cameraX) * PIXELS_PER_METER;
+
+            float y =
+                SCREEN_CENTER_Y - worldY * PIXELS_PER_METER;
+
+            if (x < -100.0f || x > SCREEN_WIDTH + 100.0f)
+                break;
+
+            // Dark tree silhouette.
+            SDL_SetRenderDrawColor(
+                renderer, 13, 16, 31, 255
+            );
+
+            // Main trunk, slightly crooked.
+            for (int i = -3; i <= 3; ++i)
+            {
+                SDL_RenderLine(
+                    renderer,
+                    x + i, y,
+                    x - 9.0f + i, y - 48.0f
+                );
+
+                SDL_RenderLine(
+                    renderer,
+                    x - 9.0f + i, y - 48.0f,
+                    x + 3.0f + i, y - 100.0f
+                );
+            }
+
+            // Left branches.
+            SDL_RenderLine(renderer,
+                x - 9, y - 52,
+                x - 37, y - 74);
+
+            SDL_RenderLine(renderer,
+                x - 37, y - 74,
+                x - 53, y - 102);
+
+            SDL_RenderLine(renderer,
+                x - 37, y - 74,
+                x - 67, y - 80);
+
+            // Right branches.
+            SDL_RenderLine(renderer,
+                x - 3, y - 70,
+                x + 29, y - 93);
+
+            SDL_RenderLine(renderer,
+                x + 29, y - 93,
+                x + 52, y - 121);
+
+            SDL_RenderLine(renderer,
+                x + 29, y - 93,
+                x + 63, y - 95);
+
+            // Higher twisted branches.
+            SDL_RenderLine(renderer,
+                x + 3, y - 100,
+                x - 18, y - 126);
+
+            SDL_RenderLine(renderer,
+                x + 3, y - 100,
+                x + 15, y - 132);
+
+            break;
+        }
+    }
+}
+
+
+
+void DrawGraveyardProps(
+    SDL_Renderer* renderer,
+    float cameraX,
+    const std::vector<TerrainSegment>& terrainSegments)
+{
+    // World positions of our gravestones.
+    const float gravePositions[] =
+    {
+        22.0f, 61.0f, 97.0f,
+        161.0f, 199.0f, 263.0f,
+        301.0f
+    };
+
+    for (float worldX : gravePositions)
+    {
+        // Find the ground height at this location.
+        for (const TerrainSegment& segment : terrainSegments)
+        {
+            if (worldX < segment.start.x ||
+                worldX > segment.end.x)
+            {
+                continue;
+            }
+
+            float t =
+                (worldX - segment.start.x) /
+                (segment.end.x - segment.start.x);
+
+            float worldY =
+                segment.start.y +
+                (segment.end.y - segment.start.y) * t;
+
+            // Convert Box2D coordinates to screen.
+            float x =
+                CAMERA_TARGET_X +
+                (worldX - cameraX) * PIXELS_PER_METER;
+
+            float y =
+                SCREEN_CENTER_Y -
+                worldY * PIXELS_PER_METER;
+
+            // Don't draw off-screen props.
+            if (x < -60.0f || x > SCREEN_WIDTH + 60.0f)
+                break;
+
+            // Dark outline.
+            SDL_SetRenderDrawColor(
+                renderer, 16, 19, 32, 255
+            );
+
+            SDL_FRect outline =
+            {
+                x - 16.0f,
+                y - 42.0f,
+                32.0f,
+                42.0f
+            };
+
+            SDL_RenderFillRect(renderer, &outline);
+
+            // Stone body.
+            SDL_SetRenderDrawColor(
+                renderer, 78, 85, 105, 255
+            );
+
+            SDL_FRect stone =
+            {
+                x - 12.0f,
+                y - 38.0f,
+                24.0f,
+                35.0f
+            };
+
+            SDL_RenderFillRect(renderer, &stone);
+
+            // Rounded-looking top.
+            SDL_FRect stoneTop =
+            {
+                x - 8.0f,
+                y - 44.0f,
+                16.0f,
+                10.0f
+            };
+
+            SDL_RenderFillRect(renderer, &stoneTop);
+
+            // Engraved cross.
+            SDL_SetRenderDrawColor(
+                renderer, 35, 40, 57, 255
+            );
+
+            SDL_FRect vertical =
+            {
+                x - 2.0f,
+                y - 32.0f,
+                4.0f,
+                20.0f
+            };
+
+            SDL_FRect horizontal =
+            {
+                x - 8.0f,
+                y - 26.0f,
+                16.0f,
+                4.0f
+            };
+
+            SDL_RenderFillRect(renderer, &vertical);
+            SDL_RenderFillRect(renderer, &horizontal);
+
+            break;
+        }
+    }
+}
+
 
 void DrawWheelSprite(
     SDL_Renderer* renderer,
@@ -1757,120 +2334,494 @@ void DrawRacePositionBadge(
 }
 
 
-void DrawGhostRewardUI(
-    SDL_Renderer* renderer,
-    TTF_Font* font,
-    const GhostProgression& progress,
-    bool levelComplete,
-    int finishPlace)
+void DrawArcadeMenuBackground(SDL_Renderer* renderer)
 {
-    if (!levelComplete || !font)
-        return;
+    auto FillRect = [&](float x, float y,
+        float w, float h, SDL_Color color)
+        {
+            SDL_SetRenderDrawColor(
+                renderer,
+                color.r, color.g, color.b, color.a
+            );
 
-    SDL_SetRenderDrawBlendMode(
-        renderer,
-        SDL_BLENDMODE_BLEND
-    );
+            SDL_FRect rect = { x, y, w, h };
+            SDL_RenderFillRect(renderer, &rect);
+        };
+
+    auto Triangle = [&](SDL_FPoint a,
+        SDL_FPoint b, SDL_FPoint c,
+        SDL_FColor color)
+        {
+            SDL_Vertex vertices[3]{};
+
+            vertices[0].position = a;
+            vertices[1].position = b;
+            vertices[2].position = c;
+
+            for (auto& vertex : vertices)
+                vertex.color = color;
+
+            const int indices[] = { 0, 1, 2 };
+
+            SDL_RenderGeometry(
+                renderer, nullptr,
+                vertices, 3, indices, 3
+            );
+        };
+
+    // ==========================================
+    // BLUE SKY
+    // ==========================================
 
     SDL_SetRenderDrawColor(
-        renderer, 20, 29, 43, 255
+        renderer, 82, 190, 235, 255
     );
+    SDL_RenderClear(renderer);
 
-    SDL_FRect panel =
+    FillRect(0, 0, 1280, 230,
+        { 62, 169, 228, 255 });
+
+    FillRect(0, 230, 1280, 180,
+        { 103, 205, 235, 255 });
+
+    // ==========================================
+    // CARTOON CLOUDS
+    // ==========================================
+
+    const float clouds[][2] =
     {
-        0.0f, 628.0f,
-        1280.0f, 92.0f
+        { 380, 85 },
+        { 890, 60 },
+        { 1100, 135 }
     };
 
-    SDL_RenderFillRect(renderer, &panel);
-
-    SDL_Color gold =
-    { 255, 210, 85, 255 };
-
-    SDL_Color white =
-    { 245, 245, 245, 255 };
-
-    SDL_Color green =
-    { 110, 255, 150, 255 };
-
-    if (finishPlace > 2 &&
-        !progress.levelOneTrophy)
+    for (const auto& cloud : clouds)
     {
-        DrawText(
-            renderer, font,
-            "FINISH 1ST OR 2ND TO UNLOCK A GHOST COLOR",
-            50, 646, gold
-        );
+        FillRect(cloud[0], cloud[1] + 20,
+            125, 22, { 247, 251, 255, 255 });
 
-        DrawText(
-            renderer, font,
-            "PRESS R TO RACE AGAIN",
-            50, 683, white
-        );
+        FillRect(cloud[0] + 20, cloud[1],
+            55, 35, { 247, 251, 255, 255 });
 
-        return;
+        FillRect(cloud[0] + 65, cloud[1] + 10,
+            45, 27, { 247, 251, 255, 255 });
     }
 
-    if (!progress.levelOneTrophy)
+    // ==========================================
+    // DISTANT MOUNTAINS
+    // ==========================================
+
+    const SDL_FColor mountain =
+    { 0.54f, 0.72f, 0.82f, 1.0f };
+
+    const SDL_FColor snow =
+    { 0.94f, 0.97f, 1.0f, 1.0f };
+
+    for (int i = 0; i < 5; ++i)
     {
-        DrawText(
-            renderer, font,
-            "VICTORY! TROPHY + ONE COLOR REWARD",
-            50, 640, gold
+        float x = 60.0f + i * 290.0f;
+        float top = 185.0f + (i % 2) * 35.0f;
+
+        Triangle(
+            { x - 180, 485 },
+            { x, top },
+            { x + 180, 485 },
+            mountain
         );
 
-        DrawText(
-            renderer, font,
-            "CLAIM: 1 CYAN  |  2 GREEN  |  3 PURPLE",
-            50, 678, white
+        Triangle(
+            { x - 38, top + 64 },
+            { x, top },
+            { x + 38, top + 64 },
+            snow
         );
-
-        return;
     }
 
-    std::string inventory = "OWNED: WHITE";
+    // ==========================================
+    // ROLLING GREEN HILLS
+    // ==========================================
 
-    for (int i = 1; i < 4; ++i)
+    const SDL_FColor distantGreen =
+    { 0.31f, 0.64f, 0.39f, 1.0f };
+
+    const SDL_FColor nearGreen =
+    { 0.17f, 0.44f, 0.28f, 1.0f };
+
+    Triangle(
+        { -100, 500 }, { 300, 350 },
+        { 700, 500 }, distantGreen
+    );
+
+    Triangle(
+        { 500, 500 }, { 930, 340 },
+        { 1400, 500 }, distantGreen
+    );
+
+    FillRect(0, 480, 1280, 125,
+        { 55, 126, 77, 255 });
+
+    Triangle(
+        { -100, 595 }, { 300, 450 },
+        { 700, 595 }, nearGreen
+    );
+
+    Triangle(
+        { 500, 595 }, { 1080, 450 },
+        { 1450, 595 }, nearGreen
+    );
+
+    // ==========================================
+    // SIMPLE PINE TREES
+    // ==========================================
+
+    const float treeX[] =
     {
-        if (progress.unlocked[i])
+        45, 110, 675, 730, 1180, 1240
+    };
+
+    for (float x : treeX)
+    {
+        FillRect(x - 4, 455, 8, 60,
+            { 76, 54, 37, 255 });
+
+        Triangle(
+            { x - 29, 477 },
+            { x, 388 },
+            { x + 29, 477 },
+            { 0.07f, 0.32f, 0.20f, 1.0f }
+        );
+    }
+
+    // ==========================================
+    // ORANGE STUNT TRACK IN DISTANCE
+    // ==========================================
+
+    for (int thickness = 0; thickness < 9; ++thickness)
+    {
+        SDL_SetRenderDrawColor(
+            renderer, 240, 123, 36, 255
+        );
+
+        for (int x = 655; x < 1280; x += 5)
         {
-            inventory += " / ";
-            inventory += GetGhostColorName(i);
+            float t = (x - 655.0f) / 625.0f;
+
+            float y =
+                400.0f -
+                65.0f * std::sin(t * 6.2831853f);
+
+            float nextT = (x + 5 - 655.0f) / 625.0f;
+
+            float nextY =
+                400.0f -
+                65.0f * std::sin(nextT * 6.2831853f);
+
+            SDL_RenderLine(
+                renderer,
+                static_cast<float>(x),
+                y + thickness,
+                static_cast<float>(x + 5),
+                nextY + thickness
+            );
+        }
+    }
+}
+
+
+
+
+
+void DrawGarageMenu(
+    SDL_Renderer* renderer,
+    TTF_Font* font,
+    TTF_Font* titleFont,
+    SDL_Texture* bikeTexture,
+    SDL_Texture* wheelTexture,
+    int selectedOption)
+{
+    SDL_SetRenderDrawColor(
+        renderer, 0, 0, 0, 255
+    );
+    SDL_RenderClear(renderer);
+
+    const SDL_Color white =
+    { 255, 255, 255, 255 };
+
+    // Center text based on its actual width.
+    auto DrawCenteredText =
+        [&](TTF_Font* textFont,
+            const char* text,
+            float y)
+        {
+            int textWidth = 0;
+            int textHeight = 0;
+
+            if (!TTF_GetStringSize(
+                textFont,
+                text,
+                0,
+                &textWidth,
+                &textHeight))
+            {
+                return;
+            }
+
+            float x =
+                (SCREEN_WIDTH - textWidth) / 2.0f;
+
+            DrawText(
+                renderer,
+                textFont,
+                text,
+                x,
+                y,
+                white
+            );
+        };
+
+    // ==========================================
+    // TITLE
+    // ==========================================
+
+    DrawCenteredText(
+        titleFont,
+        "TORQRIFT",
+        115.0f
+    );
+
+    // ==========================================
+    // MENU OPTIONS
+    // ==========================================
+
+    const char* menuOptions[] =
+    {
+        "PLAY",
+        "RIDERS",
+        "GARAGE",
+        "AWARDS",
+        "CONTROLS",
+        "QUIT"
+    };
+
+    for (int i = 0; i < 6; ++i)
+    {
+        float y = 245.0f + i * 55.0f;
+
+        DrawCenteredText(
+            titleFont,
+            menuOptions[i],
+            y
+        );
+
+        if (selectedOption == i)
+        {
+            int textWidth = 0;
+            int textHeight = 0;
+
+            if (TTF_GetStringSize(
+                titleFont,
+                menuOptions[i],
+                0,
+                &textWidth,
+                &textHeight))
+            {
+                float textX =
+                    (SCREEN_WIDTH - textWidth) / 2.0f;
+
+                DrawText(
+                    renderer,
+                    titleFont,
+                    ">",
+                    textX - 35.0f,
+                    y,
+                    white
+                );
+            }
         }
     }
 
-    DrawText(
-        renderer, font,
-        "TROPHY UNLOCKED!",
-        50, 636, gold
-    );
+    // ==========================================
+    // INSTRUCTIONS
+    // ==========================================
 
-    DrawText(
-        renderer, font,
-        inventory.c_str(),
-        50, 668, white
-    );
-
-    std::string equipped =
-        "EQUIPPED: ";
-
-    equipped +=
-        GetGhostColorName(
-            progress.equippedColor
-        );
-
-    DrawText(
-        renderer, font,
-        equipped.c_str(),
-        755, 636, green
-    );
-
-    DrawText(
-        renderer, font,
-        "0 WHITE  /  1 CYAN  /  2 GREEN  /  3 PURPLE",
-        755, 675, white
+    DrawCenteredText(
+        font,
+        "UP / DOWN - SELECT     ENTER - CONFIRM",
+        625.0f
     );
 }
+
+
+
+void DrawRiderSelect(
+    SDL_Renderer* renderer,
+    TTF_Font* font,
+    TTF_Font* titleFont,
+    int menuSelection,
+    int selectedRider)
+{
+    SDL_SetRenderDrawColor(
+        renderer, 0, 0, 0, 255
+    );
+    SDL_RenderClear(renderer);
+
+    const SDL_Color white =
+    { 255, 255, 255, 255 };
+
+    // Title.
+    DrawText(
+        renderer, titleFont,
+        "SELECT RIDER",
+        515.0f, 150.0f, white
+    );
+
+    const char* riderNames[] =
+    {
+        "GHOST",
+        "RIDER 02"
+    };
+
+    for (int i = 0; i < 2; ++i)
+    {
+        char text[64];
+
+        SDL_snprintf(
+            text,
+            sizeof(text),
+            "%s %s%s",
+            menuSelection == i ? ">" : " ",
+            riderNames[i],
+            selectedRider == i ? "  *" : ""
+        );
+
+        DrawText(
+            renderer,
+            titleFont,
+            text,
+            520.0f,
+            300.0f + i * 75.0f,
+            white
+        );
+    }
+
+    DrawText(
+        renderer, font,
+        "* CURRENT RIDER",
+        520.0f, 490.0f, white
+    );
+
+    DrawText(
+        renderer, font,
+        "UP / DOWN - SELECT   ENTER - CONFIRM   ESC - BACK",
+        300.0f, 620.0f, white
+    );
+}
+
+
+
+
+void DrawLevelSelect(
+    SDL_Renderer* renderer,
+    TTF_Font* font,
+    TTF_Font* titleFont)
+{
+    SDL_SetRenderDrawColor(
+        renderer, 0, 0, 0, 255
+    );
+
+    SDL_RenderClear(renderer);
+
+    const SDL_Color white =
+    { 255, 255, 255, 255 };
+
+    const SDL_Color gray =
+    { 130, 130, 130, 255 };
+
+    // =====================================
+    // TITLE
+    // =====================================
+
+    DrawText(
+        renderer,
+        titleFont,
+        "SELECT LEVEL",
+        485.0f, 90.0f,
+        white
+    );
+
+    // =====================================
+    // LEVEL GRID
+    // =====================================
+
+    for (int i = 0; i < 10; ++i)
+    {
+        int column = i % 5;
+        int row = i / 5;
+
+        float x = 100.0f + column * 220.0f;
+        float y = 220.0f + row * 160.0f;
+
+        bool unlocked = (i == 0);
+
+        SDL_FRect card =
+        {
+            x, y, 190.0f, 125.0f
+        };
+
+        // White outline for unlocked level.
+        // Gray outline for locked levels.
+        SDL_SetRenderDrawColor(
+            renderer,
+            unlocked ? 255 : 90,
+            unlocked ? 255 : 90,
+            unlocked ? 255 : 90,
+            255
+        );
+
+        SDL_RenderRect(renderer, &card);
+
+        char number[16];
+
+        SDL_snprintf(
+            number,
+            sizeof(number),
+            "LEVEL %02d",
+            i + 1
+        );
+
+        DrawText(
+            renderer,
+            font,
+            number,
+            x + 20.0f,
+            y + 18.0f,
+            unlocked ? white : gray
+        );
+
+        DrawText(
+            renderer,
+            font,
+            unlocked ? "HAUNTED RUN" : "LOCKED",
+            x + 20.0f,
+            y + 68.0f,
+            unlocked ? white : gray
+        );
+    }
+
+    // =====================================
+    // CONTROLS
+    // =====================================
+
+    DrawText(
+        renderer,
+        font,
+        "ENTER - PLAY     ESC - BACK",
+        435.0f, 630.0f,
+        white
+    );
+}
+
+
 
 
 void DrawRaceResults(
@@ -1880,7 +2831,8 @@ void DrawRaceResults(
     const Racer& playerRacer,
     const std::vector<Racer>& aiRacers,
     float bestTime,
-    bool newBestTime)
+    bool newBestTime,
+    int resultsMenuSelection)
 {
     if (!renderer || !font || !titleFont)
         return;
@@ -2377,6 +3329,7 @@ void DrawRaceResults(
         muted
     );
 
+
     // =============================================
     // BOTTOM ACTION BAR
     // =============================================
@@ -2384,27 +3337,39 @@ void DrawRaceResults(
     fillRect(
         0, 649,
         SCREEN_WIDTH, 71,
-        19, 29, 42, 255
-    );
-
-    fillRect(
-        920, 659,
-        310, 49,
-        38, 93, 91, 255
+        0, 0, 0, 255
     );
 
     DrawText(
-        renderer, font,
-        "R - RACE AGAIN",
-        953, 669, white
+        renderer,
+        font,
+        "RACE RESULTS",
+        45.0f, 670.0f,
+        white
     );
 
     DrawText(
-        renderer, font,
-        "TORQRIFT / RACE COMPLETE",
-        45, 670, muted
+        renderer,
+        font,
+        resultsMenuSelection == 0
+        ? "> RACE AGAIN"
+        : "  RACE AGAIN",
+        675.0f, 670.0f,
+        white
+    );
+
+    DrawText(
+        renderer,
+        font,
+        resultsMenuSelection == 1
+        ? "> MAIN MENU"
+        : "  MAIN MENU",
+        975.0f, 670.0f,
+        white
     );
 }
+
+
 
 
 
@@ -2420,12 +3385,15 @@ void Render(
     TTF_Font* countdownFont,
     SDL_Texture* bikeTexture,
     SDL_Texture* wheelTexture,
+    SDL_Texture* secondRiderBikeTexture,
+    SDL_Texture* secondRiderWheelTexture,
     b2BodyId chassisBodyId,
     b2BodyId rearWheelBodyId,
     b2BodyId frontWheelBodyId,
     const Racer& playerRacer,
     const std::vector<Racer>& aiRacers,
     const std::vector<RacerVisual>& aiVisuals,
+    int selectedRider,
     float cameraX,
     Environment& environment,
     const SDL_FRect& groundRect,
@@ -2445,13 +3413,13 @@ void Render(
     int score,
     float bestTime,
     bool newBestTime,
+    int resultsMenuSelection,
     float boostMeter,
     bool boostActive,
     int playerRacePosition,
     const ParticleSystem& particleSystem,
     float countdownTimer,
-    bool raceStarted,
-    const GhostProgression& progression)
+    bool raceStarted)
 
 {
 
@@ -2470,9 +3438,7 @@ void Render(
 
     environment.SetTerrainDrawColor(
         renderer,
-        120,
-        75,
-        35
+        83, 70, 76
     );
 
     SDL_FRect visualGround =
@@ -2499,9 +3465,7 @@ void Render(
 
     environment.SetTerrainDrawColor(
         renderer,
-        145,
-        92,
-        45
+        112, 94, 91
     );
 
     SDL_RenderFillRect(
@@ -2521,9 +3485,7 @@ void Render(
 
     environment.SetTerrainDrawColor(
         renderer,
-        120,
-        72,
-        35
+        94, 77, 82
     );
 
     SDL_RenderFillRect(
@@ -2571,9 +3533,7 @@ void Render(
 
         environment.SetTerrainDrawColor(
             renderer,
-            120,
-            75,
-            35
+            83, 70, 76
         );
 
 
@@ -2623,9 +3583,7 @@ void Render(
                 // so the hill visually becomes part of the ground.
                 environment.SetTerrainDrawColor(
                     renderer,
-                    95,
-                    55,
-                    30
+                    67, 58, 69
                 );
 
                 SDL_RenderLine(
@@ -2645,9 +3603,7 @@ void Render(
 
                 environment.SetTerrainDrawColor(
                     renderer,
-                    125,
-                    75,
-                    38
+                    92, 76, 83
                 );
 
                 SDL_RenderLine(
@@ -2667,9 +3623,7 @@ void Render(
 
                 environment.SetTerrainDrawColor(
                     renderer,
-                    155,
-                    100,
-                    50
+                    119, 98, 94
                 );
 
                 SDL_RenderLine(
@@ -2691,9 +3645,7 @@ void Render(
         // Dark grass shadow.
         environment.SetTerrainDrawColor(
             renderer,
-            35,
-            110,
-            45
+            66, 70, 58
         );
 
         SDL_RenderLine(
@@ -2708,9 +3660,7 @@ void Render(
         // Bright grass surface.
         environment.SetTerrainDrawColor(
             renderer,
-            70,
-            180,
-            75
+            139, 131, 92
         );
 
         for (int thickness = -1;
@@ -2752,9 +3702,7 @@ void Render(
 
             environment.SetTerrainDrawColor(
                 renderer,
-                45,
-                135,
-                50
+                109, 107, 80
             );
 
             // Add several small grass clumps.
@@ -2819,9 +3767,7 @@ void Render(
 
     environment.SetTerrainDrawColor(
         renderer,
-        60,
-        160,
-        70
+        129, 123, 88
     );
 
     for (int thickness = 0;
@@ -2843,9 +3789,7 @@ void Render(
 
     environment.SetTerrainDrawColor(
         renderer,
-        45,
-        135,
-        50
+        109, 107, 80
     );
 
     int grassIndex = 0;
@@ -2884,6 +3828,41 @@ void Render(
             grassY - grassHeight
         );
     }
+
+
+    DrawGroundFog(
+        renderer,
+        cameraX,
+        terrainSegments
+    );
+
+    DrawHauntedLanterns(
+        renderer,
+        cameraX,
+        terrainSegments
+    );
+
+
+
+
+    DrawBrokenFences(
+        renderer,
+        cameraX,
+        terrainSegments
+    );
+
+    DrawDeadTrees(
+        renderer,
+        cameraX,
+        terrainSegments
+    );
+
+    DrawGraveyardProps(
+        renderer,
+        cameraX,
+        terrainSegments
+    );
+
 
         // =====================================================
         // FINISH LINE
@@ -3146,10 +4125,14 @@ void Render(
         artAxleAngleDegrees;
 
 
+    // ============================================
+    // PLAYER RIDER - GHOST CHASSIS
+    // ============================================
 
-    if (progression.equippedColor == 0)
+
+    if (selectedRider == 0)
     {
-        // Original white Ghost.
+        // Ghost - original player artwork.
         SDL_RenderTextureRotated(
             renderer,
             bikeTexture,
@@ -3160,19 +4143,43 @@ void Render(
             SDL_FLIP_NONE
         );
     }
-    else
+
+    else if (selectedRider == 1)
     {
-        // Use the unlocked AI color artwork.
-        const RacerVisual& equippedVisual =
-            aiVisuals[progression.equippedColor - 1];
+        // Second playable rider.
+        // Uses its own textures, not an AI racer.
+
+        RacerVisual secondRiderVisual =
+        {
+            secondRiderBikeTexture,
+            secondRiderWheelTexture,
+
+            // PNG dimensions.
+            1254.0f,
+            1254.0f,
+
+            // Rear axle location in the new PNG.
+            68.0f,
+            1128.0f,
+
+            // Front axle location in the new PNG.
+            1190.0f,
+            1128.0f,
+
+            1.0f,
+
+            "Rider 02"
+        };
 
         DrawBikeSprite(
             renderer,
-            equippedVisual,
+            secondRiderVisual,
             rearWheelScreen,
             frontWheelScreen
         );
     }
+
+
 
 
 
@@ -3189,7 +4196,7 @@ void Render(
     // around the wheel PNG.
 
     constexpr float WHEEL_VISUAL_SCALE =
-        1.55f;
+        1.80f;
 
     float wheelSize =
         BIKE_WHEEL_RADIUS *
@@ -3232,6 +4239,12 @@ void Render(
     };
 
 
+    // Temporary visual alignment adjustment
+    constexpr float FIRE_WHEEL_Y_OFFSET = 8.0f;
+
+    rearWheelRect.y += FIRE_WHEEL_Y_OFFSET;
+    frontWheelRect.y += FIRE_WHEEL_Y_OFFSET;
+
     // -----------------------------------------------------
     // WHEEL ROTATION
     // -----------------------------------------------------
@@ -3252,55 +4265,105 @@ void Render(
         ) * RAD_TO_DEG;
 
 
-    // -----------------------------------------------------
-    // DRAW WHEELS
-    // -----------------------------------------------------
 
+    
+        // ============================================
+        // ANIMATED GHOST FIRE WHEELS
+        // ============================================
 
-    if (progression.equippedColor == 0)
-    {
-        // Original white wheels.
-        SDL_RenderTextureRotated(
-            renderer,
-            wheelTexture,
-            nullptr,
-            &rearWheelRect,
-            rearWheelAngle,
-            nullptr,
-            SDL_FLIP_NONE
+        constexpr int FRAME_COUNT = 8;
+        constexpr float FRAME_SIZE = 256.0f;
+
+        // Remember animation progress between frames.
+        static float flameFramePosition = 0.0f;
+        static Uint64 lastFlameTick = SDL_GetTicksNS();
+
+        Uint64 currentFlameTick = SDL_GetTicksNS();
+
+        float animationDeltaTime =
+            static_cast<float>(
+                currentFlameTick - lastFlameTick
+                ) / 1000000000.0f;
+
+        lastFlameTick = currentFlameTick;
+
+        // Avoid huge jumps after pauses.
+        animationDeltaTime =
+            std::min(animationDeltaTime, 0.05f);
+
+        // Read actual Box2D horizontal speed.
+        float speed = std::fabs(
+            b2Body_GetLinearVelocity(
+                chassisBodyId
+            ).x
         );
 
-        SDL_RenderTextureRotated(
-            renderer,
-            wheelTexture,
-            nullptr,
-            &frontWheelRect,
-            frontWheelAngle,
-            nullptr,
-            SDL_FLIP_NONE
-        );
-    }
-    else
-    {
-        const RacerVisual& equippedVisual =
-            aiVisuals[progression.equippedColor - 1];
+        // Flames animate faster when riding faster.
+        float framesPerSecond =
+            5.0f + std::min(speed, 15.0f) * 0.8f;
 
-        DrawWheelSprite(
-            renderer,
-            equippedVisual.wheelTexture,
-            rearWheelBodyId,
-            rearWheelScreen,
-            1.55f
-        );
+        if (boostActive)
+        {
+            framesPerSecond = 24.0f;
+        }
 
-        DrawWheelSprite(
-            renderer,
-            equippedVisual.wheelTexture,
-            frontWheelBodyId,
-            frontWheelScreen,
-            1.55f
-        );
-    }
+        flameFramePosition +=
+            animationDeltaTime * framesPerSecond;
+
+        int frameIndex =
+            static_cast<int>(flameFramePosition)
+            % FRAME_COUNT;
+
+        // Select one frame from the spritesheet.
+        SDL_FRect sourceRect =
+        {
+            frameIndex * FRAME_SIZE,
+            0.0f,
+            FRAME_SIZE,
+            FRAME_SIZE
+        };
+
+
+        if (selectedRider == 0)
+        {
+            // Ghost - animated fire wheels.
+            SDL_RenderTexture(
+                renderer,
+                wheelTexture,
+                &sourceRect,
+                &rearWheelRect
+            );
+
+            SDL_RenderTexture(
+                renderer,
+                wheelTexture,
+                &sourceRect,
+                &frontWheelRect
+            );
+        }
+
+        else if (selectedRider == 1)
+        {
+            // Second rider's black-and-white wheels.
+
+            DrawWheelSprite(
+                renderer,
+                secondRiderWheelTexture,
+                rearWheelBodyId,
+                rearWheelScreen,
+                1.25f
+            );
+
+            DrawWheelSprite(
+                renderer,
+                secondRiderWheelTexture,
+                frontWheelBodyId,
+                frontWheelScreen,
+                1.25f
+            );
+        }
+
+
 
 
     // =====================================================
@@ -3439,7 +4502,8 @@ void Render(
             playerRacer,
             aiRacers,
             bestTime,
-            newBestTime
+            newBestTime,
+            resultsMenuSelection
         );
     }
     else
@@ -3464,14 +4528,6 @@ void Render(
             playerRacePosition
         );
     }
-
-    DrawGhostRewardUI(
-        renderer,
-        font,
-        progression,
-        levelComplete,
-        playerRacer.finishPlace
-    );
 
 
 
@@ -3650,14 +4706,52 @@ int main(int argc, char* argv[])
     SDL_Texture* bikeTexture =
         IMG_LoadTexture(
             renderer,
-            "assets/Bike/rider_chassis_.png"
+            "assets/Bike/rider_chassis__.png"
         );
+
 
     SDL_Texture* wheelTexture =
         IMG_LoadTexture(
             renderer,
+            "assets/Bike/fire_wheel_strip.png"
+        );
+
+    // ============================================
+// SECOND PLAYABLE RIDER
+// ============================================
+
+    SDL_Texture* secondRiderBikeTexture =
+        IMG_LoadTexture(
+            renderer,
+            "assets/Bike/rider_chassis_.png"
+        );
+
+    SDL_Texture* secondRiderWheelTexture =
+        IMG_LoadTexture(
+            renderer,
             "assets/Bike/bike_wheel_.png"
         );
+
+    if (!secondRiderBikeTexture ||
+        !secondRiderWheelTexture)
+    {
+        SDL_Log(
+            "Second rider textures failed: %s",
+            SDL_GetError()
+        );
+
+        return 1;
+    }
+
+    SDL_SetTextureScaleMode(
+        secondRiderBikeTexture,
+        SDL_SCALEMODE_LINEAR
+    );
+
+    SDL_SetTextureScaleMode(
+        secondRiderWheelTexture,
+        SDL_SCALEMODE_LINEAR
+    );
 
     SDL_SetTextureScaleMode(
         bikeTexture,
@@ -4096,6 +5190,28 @@ int main(int argc, char* argv[])
 
     bool running = true;
 
+
+    GameScreen currentScreen = GameScreen::MainMenu;
+
+    int mainMenuSelection = 0; // 0 = Play, 1 = Quit
+    int pauseMenuSelection = 0;
+
+    bool restartRaceRequested = false;
+    int resultsMenuSelection = 0; // 0 = Race Again, 1 = Main Menu
+
+    int riderMenuSelection = 0;
+    int selectedRider = 0; // 0 = Ghost, 1 = Rider 02
+
+    bool menuUpHeld = false;
+    bool menuDownHeld = false;
+    bool enterHeld = false;
+    bool escapeHeld = false;
+
+    int selectedLevel = 1;
+
+    constexpr int MAX_LEVELS = 10;
+
+
     float cameraX = 0.0f;
 
     Uint64 previousTime =
@@ -4104,12 +5220,6 @@ int main(int argc, char* argv[])
     InputState input;
     
     bool levelComplete = false; 
-
-    GhostProgression progression =
-        LoadGhostProgress();
-
-    std::array<bool, 4> previousColorKeys =
-    { false, false, false, false };
 
     bool checkpointReached = false;
 
@@ -4143,6 +5253,8 @@ int main(int argc, char* argv[])
     // No best time exists yet so -1
     float bestTime = -1.0f;
     bool newBestTime = false;
+
+    bool hasWonHauntedRun = false;
 
     char stuntText[64] = "";
     float stuntTextTimer = 0.0f;
@@ -4204,6 +5316,831 @@ int main(int argc, char* argv[])
             / 1000000000.0f;
 
         previousTime = currentTime;
+
+
+        // ============================================
+        // MAIN GARAGE MENU
+        // ============================================
+
+        if (currentScreen == GameScreen::MainMenu)
+        {
+            ProcessInput(running, input);
+
+            if (!running)
+                break;
+
+            const bool* keys =
+                SDL_GetKeyboardState(nullptr);
+
+
+
+
+            if (keys[SDL_SCANCODE_UP] && !menuUpHeld)
+            {
+                mainMenuSelection =
+                    (mainMenuSelection + 5) % 6;
+            }
+
+            if (keys[SDL_SCANCODE_DOWN] && !menuDownHeld)
+            {
+                mainMenuSelection =
+                    (mainMenuSelection + 1) % 6;
+            }
+
+            menuUpHeld = keys[SDL_SCANCODE_UP];
+            menuDownHeld = keys[SDL_SCANCODE_DOWN];
+
+
+
+            bool enterDown =
+                keys[SDL_SCANCODE_RETURN] ||
+                keys[SDL_SCANCODE_KP_ENTER];
+
+            bool enterPressed = enterDown && !enterHeld;
+
+            enterHeld = enterDown;
+
+
+
+            if (enterPressed)
+            {
+                switch (mainMenuSelection)
+                {
+                case 0:
+                    currentScreen = GameScreen::LevelSelect;
+                    break;
+
+                case 1:
+                    currentScreen = GameScreen::RiderSelect;
+                    break;
+
+                case 2:
+                    currentScreen = GameScreen::Garage;
+                    break;
+
+                case 3:
+                    currentScreen = GameScreen::Achievements;
+                    break;
+
+                case 4:
+                    currentScreen = GameScreen::Controls;
+                    break;
+
+                case 5:
+                    running = false;
+                    break;
+                }
+
+                continue;
+            }
+
+
+
+
+
+            bool escapeDown =
+                keys[SDL_SCANCODE_ESCAPE];
+
+            bool escapePressed =
+                escapeDown && !escapeHeld;
+
+            escapeHeld = escapeDown;
+
+            if (escapePressed)
+            {
+                running = false;
+                break;
+            }
+
+
+
+
+            DrawGarageMenu(
+                renderer,
+                font,
+                stuntFont,
+                bikeTexture,
+                wheelTexture,
+                mainMenuSelection
+            );
+
+
+            SDL_RenderPresent(renderer);
+
+            SDL_Delay(16);
+
+            // Never run race physics on menu screens.
+            continue;
+        }
+
+
+        // ============================================
+        // GARAGE SCREEN
+        // ============================================
+
+        if (currentScreen == GameScreen::Garage)
+        {
+            ProcessInput(running, input);
+
+            if (!running)
+                break;
+
+            const bool* keys =
+                SDL_GetKeyboardState(nullptr);
+
+            bool enterDown =
+                keys[SDL_SCANCODE_RETURN] ||
+                keys[SDL_SCANCODE_KP_ENTER];
+
+            bool enterPressed =
+                enterDown && !enterHeld;
+
+            enterHeld = enterDown;
+
+            bool escapeDown =
+                keys[SDL_SCANCODE_ESCAPE];
+
+            bool escapePressed =
+                escapeDown && !escapeHeld;
+
+            escapeHeld = escapeDown;
+
+            if (enterPressed)
+            {
+                riderMenuSelection = selectedRider;
+                currentScreen = GameScreen::RiderSelect;
+                continue;
+            }
+
+            if (escapePressed)
+            {
+                currentScreen = GameScreen::MainMenu;
+                continue;
+            }
+
+            SDL_SetRenderDrawColor(
+                renderer, 0, 0, 0, 255
+            );
+
+            SDL_RenderClear(renderer);
+
+            const SDL_Color white =
+            { 255, 255, 255, 255 };
+
+            // Draw text centered horizontally.
+            auto DrawCentered =
+                [&](TTF_Font* textFont,
+                    const char* text,
+                    float y)
+                {
+                    int w = 0;
+                    int h = 0;
+
+                    if (TTF_GetStringSize(
+                        textFont, text, 0, &w, &h))
+                    {
+                        DrawText(
+                            renderer,
+                            textFont,
+                            text,
+                            (SCREEN_WIDTH - w) / 2.0f,
+                            y,
+                            white
+                        );
+                    }
+                };
+
+            DrawCentered(stuntFont, "GARAGE", 150.0f);
+
+            DrawCentered(
+                font,
+                "CURRENT RIDER",
+                290.0f
+            );
+
+            DrawCentered(
+                stuntFont,
+                selectedRider == 0 ? "GHOST" : "RIDER 02",
+                350.0f
+            );
+
+            DrawCentered(
+                font,
+                "ENTER - CHANGE RIDER",
+                480.0f
+            );
+
+            DrawCentered(
+                font,
+                "ESC - BACK",
+                620.0f
+            );
+
+            SDL_RenderPresent(renderer);
+            SDL_Delay(16);
+            continue;
+        }
+
+
+        // ============================================
+        // CONTROLS SCREEN
+        // ============================================
+
+        if (currentScreen == GameScreen::Controls)
+        {
+            ProcessInput(running, input);
+
+            if (!running)
+                break;
+
+            const bool* keys =
+                SDL_GetKeyboardState(nullptr);
+
+            // Keep Enter state updated.
+            enterHeld =
+                keys[SDL_SCANCODE_RETURN] ||
+                keys[SDL_SCANCODE_KP_ENTER];
+
+            // Escape returns to Main Menu.
+            bool escapeDown =
+                keys[SDL_SCANCODE_ESCAPE];
+
+            bool escapePressed =
+                escapeDown && !escapeHeld;
+
+            escapeHeld = escapeDown;
+
+            if (escapePressed)
+            {
+                currentScreen = GameScreen::MainMenu;
+                continue;
+            }
+
+            SDL_SetRenderDrawColor(
+                renderer, 0, 0, 0, 255
+            );
+            SDL_RenderClear(renderer);
+
+            const SDL_Color white =
+            { 255, 255, 255, 255 };
+
+            // Center the title.
+            int titleWidth = 0;
+            int titleHeight = 0;
+
+            TTF_GetStringSize(
+                stuntFont, "CONTROLS", 0,
+                &titleWidth, &titleHeight
+            );
+
+            DrawText(
+                renderer, stuntFont,
+                "CONTROLS",
+                (SCREEN_WIDTH - titleWidth) / 2.0f,
+                100.0f,
+                white
+            );
+
+            // Keyboard controls.
+            const char* controls[] =
+            {
+                "W  -  ACCELERATE",
+                "S  -  REVERSE",
+                "A  -  LEAN BACKWARD",
+                "D  -  LEAN FORWARD",
+                "SPACE  -  BUNNY HOP",
+                "R  -  RESTART / RESPAWN"
+            };
+
+            for (int i = 0; i < 6; ++i)
+            {
+                DrawText(
+                    renderer,
+                    font,
+                    controls[i],
+                    430.0f,
+                    225.0f + i * 48.0f,
+                    white
+                );
+            }
+
+            DrawText(
+                renderer, font,
+                "BOOST ACTIVATES AUTOMATICALLY",
+                430.0f, 530.0f, white
+            );
+
+            DrawText(
+                renderer, font,
+                "ESC - BACK",
+                535.0f, 630.0f, white
+            );
+
+            SDL_RenderPresent(renderer);
+            SDL_Delay(16);
+            continue;
+        }
+
+
+        // ============================================
+        // OTHER MENU SCREENS
+        // ============================================
+
+
+        if (currentScreen == GameScreen::Achievements)
+        {
+            ProcessInput(running, input);
+
+            if (!running)
+                break;
+
+            const bool* keys =
+                SDL_GetKeyboardState(nullptr);
+
+            enterHeld =
+                keys[SDL_SCANCODE_RETURN] ||
+                keys[SDL_SCANCODE_KP_ENTER];
+
+            bool escapeDown =
+                keys[SDL_SCANCODE_ESCAPE];
+
+            bool escapePressed =
+                escapeDown && !escapeHeld;
+
+            escapeHeld = escapeDown;
+
+            if (escapePressed)
+            {
+                currentScreen = GameScreen::MainMenu;
+                continue;
+            }
+
+            SDL_SetRenderDrawColor(
+                renderer, 0, 0, 0, 255
+            );
+            SDL_RenderClear(renderer);
+
+            const SDL_Color white =
+            { 255, 255, 255, 255 };
+
+            const SDL_Color gray =
+            { 150, 150, 150, 255 };
+
+            DrawText(
+                renderer, stuntFont,
+                "AWARDS",
+                560.0f, 125.0f, white
+            );
+
+            DrawText(
+                renderer, font,
+                "COMPLETE HAUNTED RUN",
+                385.0f, 285.0f, white
+            );
+
+            DrawText(
+                renderer, font,
+                bestTime >= 0.0f
+                ? "COMPLETED"
+                : "NOT COMPLETED",
+                720.0f, 285.0f,
+                bestTime >= 0.0f ? white : gray
+            );
+
+            DrawText(
+                renderer, font,
+                "WIN HAUNTED RUN",
+                385.0f, 355.0f, white
+            );
+
+            DrawText(
+                renderer, font,
+                hasWonHauntedRun
+                ? "COMPLETED"
+                : "NOT COMPLETED",
+                720.0f, 355.0f,
+                hasWonHauntedRun ? white : gray
+            );
+
+            DrawText(
+                renderer, font,
+                "ESC - BACK",
+                535.0f, 620.0f, white
+            );
+
+            SDL_RenderPresent(renderer);
+            SDL_Delay(16);
+            continue;
+        }
+
+
+
+        // ============================================
+        // RIDER SELECT
+        // ============================================
+
+        if (currentScreen == GameScreen::RiderSelect)
+        {
+            ProcessInput(running, input);
+
+            if (!running)
+                break;
+
+            const bool* keys =
+                SDL_GetKeyboardState(nullptr);
+
+            if (keys[SDL_SCANCODE_UP] && !menuUpHeld)
+            {
+                riderMenuSelection =
+                    (riderMenuSelection + 1) % 2;
+            }
+
+            if (keys[SDL_SCANCODE_DOWN] && !menuDownHeld)
+            {
+                riderMenuSelection =
+                    (riderMenuSelection + 1) % 2;
+            }
+
+            menuUpHeld = keys[SDL_SCANCODE_UP];
+            menuDownHeld = keys[SDL_SCANCODE_DOWN];
+
+            bool enterDown =
+                keys[SDL_SCANCODE_RETURN] ||
+                keys[SDL_SCANCODE_KP_ENTER];
+
+            bool enterPressed =
+                enterDown && !enterHeld;
+
+            enterHeld = enterDown;
+
+            if (enterPressed)
+            {
+                selectedRider = riderMenuSelection;
+            }
+
+            // Return to main menu.
+            // Use the escapeHeld variable from our
+            // previous menu-navigation fix.
+            bool escapeDown =
+                keys[SDL_SCANCODE_ESCAPE];
+
+            bool escapePressed =
+                escapeDown && !escapeHeld;
+
+            escapeHeld = escapeDown;
+
+            if (escapePressed)
+            {
+                currentScreen = GameScreen::MainMenu;
+                continue;
+            }
+
+            DrawRiderSelect(
+                renderer,
+                font,
+                stuntFont,
+                riderMenuSelection,
+                selectedRider
+            );
+
+            SDL_RenderPresent(renderer);
+            SDL_Delay(16);
+            continue;
+        }
+
+
+        // ============================================
+        // LEVEL SELECT SCREEN
+        // ============================================
+
+        if (currentScreen == GameScreen::LevelSelect)
+        {
+            // Handle keyboard and window events.
+            ProcessInput(running, input);
+
+            if (!running)
+                break;
+
+            const bool* keys =
+                SDL_GetKeyboardState(nullptr);
+
+
+            bool enterDown =
+                keys[SDL_SCANCODE_RETURN] ||
+                keys[SDL_SCANCODE_KP_ENTER];
+
+            bool enterPressed =
+                enterDown && !enterHeld;
+
+            enterHeld = enterDown;
+
+            if (enterPressed)
+            {
+                selectedLevel = 1;
+
+                currentScreen = GameScreen::Race;
+
+                SDL_Log(
+                    "Starting Level %d",
+                    selectedLevel
+                );
+
+                continue;
+            }
+
+            // Escape returns to Main Menu.
+            if (keys[SDL_SCANCODE_ESCAPE])
+            {
+                currentScreen = GameScreen::MainMenu;
+                continue;
+            }
+
+
+            // Draw our Level Select menu.
+            DrawLevelSelect(
+                renderer,
+                font,
+                stuntFont
+            );
+
+            SDL_RenderPresent(renderer);
+
+            // Prevent unnecessary CPU usage.
+            SDL_Delay(16);
+
+            // Do not run race physics in the menu.
+            continue;
+        }
+
+
+
+        // ============================================
+        // PAUSE SCREEN
+        // ============================================
+
+
+        if (currentScreen == GameScreen::Pause)
+        {
+            ProcessInput(running, input);
+
+            if (!running)
+                break;
+
+            const bool* keys =
+                SDL_GetKeyboardState(nullptr);
+
+            // --------------------------------
+            // UP / DOWN SELECTION
+            // --------------------------------
+
+            if (keys[SDL_SCANCODE_UP] && !menuUpHeld)
+            {
+                pauseMenuSelection =
+                    (pauseMenuSelection + 2) % 3;
+            }
+
+            if (keys[SDL_SCANCODE_DOWN] && !menuDownHeld)
+            {
+                pauseMenuSelection =
+                    (pauseMenuSelection + 1) % 3;
+            }
+
+            menuUpHeld = keys[SDL_SCANCODE_UP];
+            menuDownHeld = keys[SDL_SCANCODE_DOWN];
+
+            // --------------------------------
+            // ENTER
+            // --------------------------------
+
+            bool enterDown =
+                keys[SDL_SCANCODE_RETURN] ||
+                keys[SDL_SCANCODE_KP_ENTER];
+
+            bool enterPressed =
+                enterDown && !enterHeld;
+
+            enterHeld = enterDown;
+
+            // --------------------------------
+            // ESCAPE
+            // --------------------------------
+
+            bool escapeDown =
+                keys[SDL_SCANCODE_ESCAPE];
+
+            bool escapePressed =
+                escapeDown && !escapeHeld;
+
+            escapeHeld = escapeDown;
+
+
+            if (enterPressed)
+            {
+                if (pauseMenuSelection == 0)
+                {
+                    // Resume.
+                    currentScreen = GameScreen::Race;
+                }
+                else if (pauseMenuSelection == 1)
+                {
+                    // Request a fresh race.
+                    restartRaceRequested = true;
+                    currentScreen = GameScreen::Race;
+                }
+                else
+                {
+                    // Start fresh next time Play is chosen.
+                    restartRaceRequested = true;
+                    currentScreen = GameScreen::MainMenu;
+                    mainMenuSelection = 0;
+                }
+
+                physicsAccumulator = 0.0f;
+                continue;
+            }
+
+            // --------------------------------
+            // DRAW PAUSE MENU
+            // --------------------------------
+
+            SDL_SetRenderDrawColor(
+                renderer, 0, 0, 0, 255
+            );
+            SDL_RenderClear(renderer);
+
+            const SDL_Color white =
+            { 255, 255, 255, 255 };
+
+            const char* options[] =
+            {
+                "RESUME",
+                "RESTART",
+                "MAIN MENU"
+            };
+
+            auto DrawCentered =
+                [&](const char* text, float y)
+                {
+                    int width = 0;
+                    int height = 0;
+
+                    if (TTF_GetStringSize(
+                        stuntFont, text, 0,
+                        &width, &height))
+                    {
+                        DrawText(
+                            renderer,
+                            stuntFont,
+                            text,
+                            (SCREEN_WIDTH - width) / 2.0f,
+                            y,
+                            white
+                        );
+                    }
+                };
+
+            DrawCentered("PAUSED", 150.0f);
+
+            for (int i = 0; i < 3; ++i)
+            {
+                int width = 0;
+                int height = 0;
+
+                TTF_GetStringSize(
+                    stuntFont,
+                    options[i],
+                    0,
+                    &width,
+                    &height
+                );
+
+                float x =
+                    (SCREEN_WIDTH - width) / 2.0f;
+
+                float y = 300.0f + i * 70.0f;
+
+                DrawText(
+                    renderer,
+                    stuntFont,
+                    options[i],
+                    x, y, white
+                );
+
+                if (pauseMenuSelection == i)
+                {
+                    DrawText(
+                        renderer,
+                        stuntFont,
+                        ">",
+                        x - 35.0f,
+                        y,
+                        white
+                    );
+                }
+            }
+
+            DrawText(
+                renderer,
+                font,
+                "UP / DOWN - SELECT    ENTER - CONFIRM",
+                390.0f,
+                630.0f,
+                white
+            );
+
+            SDL_RenderPresent(renderer);
+            SDL_Delay(16);
+            continue;
+        }
+
+
+
+        // ============================================
+        // RACE INPUT / PAUSE DETECTION
+        // ============================================
+
+
+        if (currentScreen == GameScreen::Race)
+        {
+            ProcessInput(running, input);
+
+            if (!running)
+                break;
+
+            const bool* keys =
+                SDL_GetKeyboardState(nullptr);
+
+            bool escapeDown =
+                keys[SDL_SCANCODE_ESCAPE];
+
+            bool escapePressed =
+                escapeDown && !escapeHeld;
+
+            escapeHeld = escapeDown;
+
+            bool enterDown =
+                keys[SDL_SCANCODE_RETURN] ||
+                keys[SDL_SCANCODE_KP_ENTER];
+
+            bool enterPressed =
+                enterDown && !enterHeld;
+
+            enterHeld = enterDown;
+
+            if (levelComplete)
+            {
+                if (keys[SDL_SCANCODE_UP] && !menuUpHeld)
+                {
+                    resultsMenuSelection =
+                        (resultsMenuSelection + 1) % 2;
+                }
+
+                if (keys[SDL_SCANCODE_DOWN] && !menuDownHeld)
+                {
+                    resultsMenuSelection =
+                        (resultsMenuSelection + 1) % 2;
+                }
+
+                menuUpHeld = keys[SDL_SCANCODE_UP];
+                menuDownHeld = keys[SDL_SCANCODE_DOWN];
+
+                if (enterPressed)
+                {
+                    restartRaceRequested = true;
+                    physicsAccumulator = 0.0f;
+
+                    if (resultsMenuSelection == 1)
+                    {
+                        currentScreen = GameScreen::MainMenu;
+                        mainMenuSelection = 0;
+                    }
+
+                    continue;
+                }
+
+                if (escapePressed)
+                {
+                    restartRaceRequested = true;
+                    currentScreen = GameScreen::MainMenu;
+                    mainMenuSelection = 0;
+                    physicsAccumulator = 0.0f;
+                    continue;
+                }
+            }
+            else
+            {
+                menuUpHeld = keys[SDL_SCANCODE_UP];
+                menuDownHeld = keys[SDL_SCANCODE_DOWN];
+
+                if (escapePressed)
+                {
+                    currentScreen = GameScreen::Pause;
+                    pauseMenuSelection = 0;
+                    physicsAccumulator = 0.0f;
+                    continue;
+                }
+            }
+        }
 
 
         // ---------------------------------------------
@@ -4284,91 +6221,10 @@ int main(int argc, char* argv[])
         }
 
 
-        // -------------------------------------------------
-        // INPUT
-        // -------------------------------------------------
 
-        ProcessInput(
-            running,
-            input
-        );
-
-
-        // ============================================
-        // GHOST COLOR REWARDS / INVENTORY
-        // ============================================
-
-        const bool* keys =
-            SDL_GetKeyboardState(nullptr);
-
-        const SDL_Scancode colorKeys[4] =
+        if (input.resetPressed || restartRaceRequested)
         {
-            SDL_SCANCODE_0,
-            SDL_SCANCODE_1,
-            SDL_SCANCODE_2,
-            SDL_SCANCODE_3
-        };
-
-        int selectedColor = -1;
-
-        for (int i = 0; i < 4; ++i)
-        {
-            bool down = keys[colorKeys[i]];
-
-            if (down && !previousColorKeys[i])
-            {
-                selectedColor = i;
-            }
-
-            previousColorKeys[i] = down;
-        }
-
-        if (selectedColor >= 0)
-        {
-            bool canClaimReward =
-                levelComplete &&
-                playerRacer.finishPlace >= 1 &&
-                playerRacer.finishPlace <= 2 &&
-                !progression.levelOneTrophy;
-
-            if (canClaimReward &&
-                selectedColor > 0)
-            {
-                // Claim one AI color from Level 1.
-                progression.unlocked[selectedColor] =
-                    true;
-
-                progression.levelOneTrophy = true;
-
-                progression.equippedColor =
-                    selectedColor;
-
-                SaveGhostProgress(progression);
-
-                SDL_Log(
-                    "TROPHY EARNED! Unlocked %s",
-                    GetGhostColorName(selectedColor)
-                );
-            }
-            else if (progression.unlocked[selectedColor])
-            {
-                // Equip an already-owned color.
-                if (progression.equippedColor !=
-                    selectedColor)
-                {
-                    progression.equippedColor =
-                        selectedColor;
-
-                    SaveGhostProgress(progression);
-                }
-            }
-        }
-
-
-
-        if (input.resetPressed)
-        {
-            if (levelComplete)
+            if (levelComplete || restartRaceRequested)
             {
                 // =============================================
                 // FULL NEW RACE
@@ -4436,6 +6292,8 @@ int main(int argc, char* argv[])
                     playerRacer.spawnPosition.x;
 
                 levelComplete = false;
+
+                resultsMenuSelection = 0;
             }
             else
             {
@@ -4489,6 +6347,29 @@ int main(int argc, char* argv[])
                 0.0f;
 
             particleSystem.Clear();
+
+
+            if (restartRaceRequested)
+            {
+                boostMeter = 0.0f;
+                boostActive = false;
+
+                comboCount = 0;
+                comboTimer = 0.0f;
+
+                wheelieTime = 0.0f;
+                wheelieAwarded = false;
+
+                previousBikeAngle = 0.0f;
+                flipCount = 0;
+
+                newBestTime = false;
+
+                physicsAccumulator = 0.0f;
+
+                restartRaceRequested = false;
+            }
+
         }
 
 
@@ -5216,6 +7097,10 @@ int main(int argc, char* argv[])
             playerRacer.finishPlace =
                 nextFinishPlace;
 
+            if (playerRacer.finishPlace == 1)
+            {
+                hasWonHauntedRun = true;
+            }
             playerRacer.finishTime = levelTime;
 
             ++nextFinishPlace;
@@ -5493,12 +7378,15 @@ int main(int argc, char* argv[])
             countdownFont,
             bikeTexture,
             wheelTexture,
+            secondRiderBikeTexture,
+            secondRiderWheelTexture,
             playerRacer.bike.chassisBodyId,
             playerRacer.bike.rearWheelBodyId,
             playerRacer.bike.frontWheelBodyId,
             playerRacer,
             aiRacers,
             aiVisuals,
+            selectedRider,
             cameraX,
             environment,
             groundRect,
@@ -5518,13 +7406,13 @@ int main(int argc, char* argv[])
             score,
             bestTime,
             newBestTime,
+            resultsMenuSelection,
             boostMeter,
             boostActive,
             playerRacer.currentPosition,
             particleSystem,
             countdownTimer,
-            raceStarted,
-            progression
+            raceStarted
         );
     }
 
@@ -5556,6 +7444,9 @@ int main(int argc, char* argv[])
 
     SDL_DestroyTexture(riotBikeTexture);
     SDL_DestroyTexture(riotWheelTexture);
+
+    SDL_DestroyTexture(secondRiderBikeTexture);
+    SDL_DestroyTexture(secondRiderWheelTexture);
 
     SDL_DestroyRenderer(
         renderer
