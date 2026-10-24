@@ -14,6 +14,8 @@
 #include "AIController.h"
 #include "Racer.h"
 #include <string>
+#include <fstream>
+#include <sstream>
 
 // ---------------------------------------------------------
 // CONSTANTS
@@ -304,6 +306,169 @@ void DrawFinishLine(
 
     
 }
+
+
+struct SaveData
+{
+    float bestTime = -1.0f;
+
+    bool hauntedRunCompleted = false;
+    bool hauntedRunWon = false;
+
+    int selectedRider = 0;
+
+    int highestUnlockedLevel = 1;
+};
+
+
+bool SaveGame(const SaveData& data)
+{
+    std::ofstream file("save.txt");
+
+    if (!file.is_open())
+    {
+        SDL_Log("Failed to open save file for writing.");
+        return false;
+    }
+
+    file << "TORQRIFT_SAVE_V1\n";
+
+    file << data.bestTime << '\n';
+    file << data.hauntedRunCompleted << '\n';
+    file << data.hauntedRunWon << '\n';
+    file << data.selectedRider << '\n';
+    file << data.highestUnlockedLevel << '\n';
+
+    file.flush();
+
+    if (!file.good())
+    {
+        SDL_Log("Failed to write save data.");
+        return false;
+    }
+
+    return true;
+}
+
+
+SaveData LoadGame()
+{
+    SaveData data;
+
+    std::ifstream file("save.txt");
+
+    if (!file.is_open())
+    {
+        return data;
+    }
+
+    std::string header;
+
+    if (!(file >> header))
+    {
+        return data;
+    }
+
+    // Load our new save format.
+    if (header == "TORQRIFT_SAVE_V1")
+    {
+        SaveData loaded;
+
+        int completed = 0;
+        int won = 0;
+
+        if (!(file >> loaded.bestTime
+            >> completed
+            >> won
+            >> loaded.selectedRider
+            >> loaded.highestUnlockedLevel))
+        {
+            return data;
+        }
+
+        if (!std::isfinite(loaded.bestTime) ||
+            (loaded.bestTime != -1.0f &&
+                loaded.bestTime <= 0.0f))
+        {
+            return data;
+        }
+
+        loaded.hauntedRunCompleted = completed != 0;
+        loaded.hauntedRunWon = won != 0;
+
+        // Only two playable riders exist currently.
+        if (loaded.selectedRider < 0 ||
+            loaded.selectedRider > 1)
+        {
+            loaded.selectedRider = 0;
+        }
+
+        // Only Haunted Run is playable for now.
+        loaded.highestUnlockedLevel = 1;
+
+        return loaded;
+    }
+
+    // Support the original save.txt format,
+    // which contained only a best-time number.
+    std::istringstream oldSave(header);
+
+    float previousBestTime = -1.0f;
+
+    if (oldSave >> previousBestTime &&
+        std::isfinite(previousBestTime) &&
+        previousBestTime > 0.0f)
+    {
+        data.bestTime = previousBestTime;
+        data.hauntedRunCompleted = true;
+    }
+
+    return data;
+}
+
+
+void SaveBestTime(float bestTime)
+{
+    std::ofstream saveFile("save.txt");
+
+    if (!saveFile.is_open())
+    {
+        SDL_Log("Failed to open save file!");
+        return;
+    }
+
+    saveFile << bestTime << '\n';
+
+    saveFile.close();
+
+    SDL_Log("Best time saved!");
+}
+
+
+float LoadBestTime()
+{
+    std::ifstream saveFile("save.txt");
+
+    // No existing save file.
+    if (!saveFile.is_open())
+    {
+        return -1.0f;
+    }
+
+    float savedTime = -1.0f;
+
+    // Read and validate the saved time.
+    if (saveFile >> savedTime &&
+        std::isfinite(savedTime) &&
+        savedTime > 0.0f)
+    {
+        return savedTime;
+    }
+
+    // Invalid or empty save file.
+    return -1.0f;
+}
+
 
 void DrawText(
     SDL_Renderer* renderer,
@@ -5190,6 +5355,7 @@ int main(int argc, char* argv[])
 
     bool running = true;
 
+    SaveData saveData = LoadGame();
 
     GameScreen currentScreen = GameScreen::MainMenu;
 
@@ -5200,7 +5366,7 @@ int main(int argc, char* argv[])
     int resultsMenuSelection = 0; // 0 = Race Again, 1 = Main Menu
 
     int riderMenuSelection = 0;
-    int selectedRider = 0; // 0 = Ghost, 1 = Rider 02
+    int selectedRider = saveData.selectedRider;
 
     bool menuUpHeld = false;
     bool menuDownHeld = false;
@@ -5250,11 +5416,11 @@ int main(int argc, char* argv[])
 
     Environment environment;
 
-    // No best time exists yet so -1
-    float bestTime = -1.0f;
+    // Load the previous best time when the game starts.
+    float bestTime = saveData.bestTime;
     bool newBestTime = false;
 
-    bool hasWonHauntedRun = false;
+    bool hasWonHauntedRun = saveData.hauntedRunWon;
 
     char stuntText[64] = "";
     float stuntTextTimer = 0.0f;
@@ -5773,10 +5939,19 @@ int main(int argc, char* argv[])
 
             enterHeld = enterDown;
 
-            if (enterPressed)
-            {
-                selectedRider = riderMenuSelection;
-            }
+            
+
+                if (enterPressed)
+                {
+                    selectedRider = riderMenuSelection;
+
+                    // Update saved rider selection.
+                    saveData.selectedRider = selectedRider;
+
+                    // Write progress to disk.
+                    SaveGame(saveData);
+                }
+
 
             // Return to main menu.
             // Use the escapeHeld variable from our
@@ -7117,7 +7292,22 @@ int main(int argc, char* argv[])
             {
                 bestTime = levelTime;
                 newBestTime = true;
+
+                SaveBestTime(bestTime);
             }
+
+
+            // ============================================
+            // SAVE COMPLETED RACE PROGRESS
+            // ============================================
+
+            saveData.bestTime = bestTime;
+            saveData.hauntedRunCompleted = true;
+            saveData.hauntedRunWon = hasWonHauntedRun;
+            saveData.selectedRider = selectedRider;
+
+            SaveGame(saveData);
+
         }
 
 
