@@ -41,6 +41,23 @@ constexpr float CHECKPOINT_X = 155.0f;
 constexpr float COMBO_WINDOW = 3.0f;
 
 
+struct RiderDefinition
+{
+    const char* name;
+    bool unlockedByDefault;
+    int winsRequired;
+};
+
+constexpr RiderDefinition RIDERS[] =
+{
+    { "GHOST", true, 0 },
+    { "RIDER 02", true, 0 }
+};
+
+constexpr int RIDER_COUNT =
+sizeof(RIDERS) / sizeof(RIDERS[0]);
+
+
 
 enum class GameScreen
 {
@@ -2840,13 +2857,8 @@ void DrawRiderSelect(
         515.0f, 150.0f, white
     );
 
-    const char* riderNames[] =
-    {
-        "GHOST",
-        "RIDER 02"
-    };
 
-    for (int i = 0; i < 2; ++i)
+    for (int i = 0; i < RIDER_COUNT; ++i)
     {
         char text[64];
 
@@ -2855,7 +2867,7 @@ void DrawRiderSelect(
             sizeof(text),
             "%s %s%s",
             menuSelection == i ? ">" : " ",
-            riderNames[i],
+            RIDERS[i].name,
             selectedRider == i ? "  *" : ""
         );
 
@@ -5918,7 +5930,8 @@ int main(int argc, char* argv[])
             if (keys[SDL_SCANCODE_UP] && !menuUpHeld)
             {
                 riderMenuSelection =
-                    (riderMenuSelection + 1) % 2;
+                    (riderMenuSelection + RIDER_COUNT - 1)
+                    % RIDER_COUNT;
             }
 
             if (keys[SDL_SCANCODE_DOWN] && !menuDownHeld)
