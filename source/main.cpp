@@ -3548,6 +3548,227 @@ void DrawRaceResults(
 
 
 
+void DrawRaceMinimap(
+    SDL_Renderer* renderer,
+    const std::vector<TerrainSegment>& terrainSegments,
+    const Racer& playerRacer,
+    const std::vector<Racer>& aiRacers)
+{
+    if (terrainSegments.empty())
+        return;
+
+
+    constexpr float mapWidth = 200.0f;
+    constexpr float mapHeight = 65.0f;
+
+    constexpr float mapX = 20.0f;
+    constexpr float mapY = 85.0f;
+
+    constexpr float padding = 7.0f;
+
+
+    // Find the terrain's vertical range.
+    float minY = terrainSegments.front().start.y;
+    float maxY = minY;
+
+    for (const TerrainSegment& segment : terrainSegments)
+    {
+        minY = std::min(minY,
+            std::min(segment.start.y, segment.end.y));
+
+        maxY = std::max(maxY,
+            std::max(segment.start.y, segment.end.y));
+    }
+
+    // Avoid dividing by zero on flat terrain.
+    float heightRange = std::max(maxY - minY, 1.0f);
+
+    // Convert world coordinates into minimap coordinates.
+    auto ToMapX = [&](float worldX)
+        {
+            float progress =
+                std::clamp(worldX / FINISH_X, 0.0f, 1.0f);
+
+            return mapX + padding +
+                progress * (mapWidth - padding * 2.0f);
+        };
+
+    auto ToMapY = [&](float worldY)
+        {
+            float height =
+                std::clamp(
+                    (worldY - minY) / heightRange,
+                    0.0f, 1.0f
+                );
+
+            return mapY + mapHeight - padding -
+                height * (mapHeight - padding * 2.0f);
+        };
+
+    // Find the track height underneath a racer.
+    auto GetTrackY = [&](float worldX)
+        {
+            for (const TerrainSegment& segment : terrainSegments)
+            {
+                float left = std::min(
+                    segment.start.x, segment.end.x);
+
+                float right = std::max(
+                    segment.start.x, segment.end.x);
+
+                if (worldX < left || worldX > right)
+                    continue;
+
+                float dx = segment.end.x - segment.start.x;
+
+                if (std::fabs(dx) < 0.001f)
+                    continue;
+
+                float t = (worldX - segment.start.x) / dx;
+
+                return segment.start.y +
+                    (segment.end.y - segment.start.y) * t;
+            }
+
+            return minY;
+        };
+
+    // ========================================
+    // BACKGROUND
+    // ========================================
+
+    SDL_SetRenderDrawBlendMode(
+        renderer, SDL_BLENDMODE_BLEND);
+
+    SDL_SetRenderDrawColor(
+        renderer, 0, 0, 0, 95);
+
+    SDL_FRect background =
+    {
+        mapX, mapY, mapWidth, mapHeight
+    };
+
+    SDL_RenderFillRect(renderer, &background);
+
+    SDL_SetRenderDrawColor(
+        renderer, 140, 140, 140, 130);
+
+    SDL_RenderRect(renderer, &background);
+
+    // ========================================
+    // TERRAIN PROFILE
+    // ========================================
+
+    SDL_SetRenderDrawColor(
+        renderer, 245, 245, 245, 255);
+
+    for (const TerrainSegment& segment : terrainSegments)
+    {
+        // Skip segments outside the race.
+        if (segment.end.x < 0.0f ||
+            segment.start.x > FINISH_X)
+            continue;
+
+        float startX = std::clamp(
+            segment.start.x, 0.0f, FINISH_X);
+
+        float endX = std::clamp(
+            segment.end.x, 0.0f, FINISH_X);
+
+        // Interpolate heights if we clipped the segment.
+        float dx = segment.end.x - segment.start.x;
+
+        if (std::fabs(dx) < 0.001f)
+            continue;
+
+        float t1 = (startX - segment.start.x) / dx;
+        float t2 = (endX - segment.start.x) / dx;
+
+        float startY = segment.start.y +
+            (segment.end.y - segment.start.y) * t1;
+
+        float endY = segment.start.y +
+            (segment.end.y - segment.start.y) * t2;
+
+        SDL_RenderLine(
+            renderer,
+            ToMapX(startX), ToMapY(startY),
+            ToMapX(endX), ToMapY(endY)
+        );
+    }
+
+    // ========================================
+    // FINISH LINE
+    // ========================================
+
+    SDL_SetRenderDrawColor(
+        renderer, 180, 180, 180, 255);
+
+    SDL_RenderLine(
+        renderer,
+        ToMapX(FINISH_X),
+        mapY + 6.0f,
+        ToMapX(FINISH_X),
+        mapY + mapHeight - 6.0f
+    );
+
+    // ========================================
+    // RACER MARKERS
+    // ========================================
+
+    auto DrawMarker = [&](float worldX, SDL_Color color,
+        float markerSize)
+        {
+            SDL_SetRenderDrawColor(
+                renderer,
+                color.r, color.g, color.b, color.a
+            );
+
+            float x = ToMapX(worldX);
+            float y = ToMapY(GetTrackY(worldX)) - 5.0f;
+
+            SDL_FRect marker =
+            {
+                x - markerSize / 2.0f,
+                y - markerSize / 2.0f,
+                markerSize,
+                markerSize
+            };
+
+            SDL_RenderFillRect(renderer, &marker);
+        };
+
+    // AI racers.
+    const SDL_Color aiColors[] =
+    {
+        { 255, 180, 70, 255 },
+        { 180, 120, 255, 255 },
+        { 255, 100, 110, 255 }
+    };
+
+    for (size_t i = 0; i < aiRacers.size(); ++i)
+    {
+        b2Vec2 position = b2Body_GetPosition(
+            aiRacers[i].bike.chassisBodyId);
+
+        DrawMarker(
+            position.x,
+            aiColors[i % 3],
+            6.0f
+        );
+    }
+
+    // Player marker - slightly larger.
+    b2Vec2 playerPosition = b2Body_GetPosition(
+        playerRacer.bike.chassisBodyId);
+
+    DrawMarker(
+        playerPosition.x,
+        { 55, 210, 255, 255 },
+        9.0f
+    );
+}
+
 
 
 
@@ -4706,7 +4927,19 @@ void Render(
         );
     }
 
+    // ============================================
+    // RACE MINIMAP
+    // ============================================
 
+    if (!levelComplete)
+    {
+        DrawRaceMinimap(
+            renderer,
+            terrainSegments,
+            playerRacer,
+            aiRacers
+        );
+    }
 
     // ============================================
     // RACE START COUNTDOWN
