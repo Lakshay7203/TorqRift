@@ -4978,6 +4978,19 @@ void Render(
                 ? SDL_Color{ 80, 255, 130, 255 }
             : SDL_Color{ 255, 220, 70, 255 };
 
+            // Smoothly fade GO! after the race begins.
+            if (raceStarted)
+            {
+                float fadeProgress = std::clamp(
+                    levelTime / 0.7f,
+                    0.0f,
+                    1.0f
+                );
+
+                countdownColor.a = static_cast<Uint8>(
+                    255.0f * (1.0f - fadeProgress)
+                    );
+            }
             DrawText(
                 renderer,
                 countdownFont,
@@ -7247,129 +7260,137 @@ int main(int argc, char* argv[])
 
                     if (positiveFlipCompleted)
                     {
-                        comboCount++;
+                        // One full rotation is approximately 2 * PI.
+                        constexpr float FULL_ROTATION = 6.2831853f;
 
-                        comboTimer =
-                            COMBO_WINDOW;
+                        // Keep our existing flip threshold of 5.5 radians.
+                        constexpr float FLIP_TOLERANCE =
+                            FULL_ROTATION - 5.5f;
 
+                        // Count how many front flips happened in this jump.
+                        int frontflipCount = static_cast<int>(
+                            std::floor(
+                                (accumulatedRotation + FLIP_TOLERANCE)
+                                / FULL_ROTATION
+                            )
+                            );
 
-                        const int baseFlipScore =
-                            500;
+                        // Cap rewards at triple front flip for now.
+                        frontflipCount = std::clamp(frontflipCount, 0, 3);
 
-
-                        const int stuntScore =
-                            baseFlipScore *
-                            comboCount;
-
-
-                        score +=
-                            stuntScore;
-
-
-                        boostMeter +=
-                            50.0f;
-
-
-                        if (boostMeter > MAX_BOOST)
+                        if (frontflipCount > 0)
                         {
-                            boostMeter =
-                                MAX_BOOST;
-                        }
+                            comboCount++;
+                            comboTimer = COMBO_WINDOW;
 
+                            // Bigger rewards for multiple rotations.
+                            const int baseScore =
+                                500 + (frontflipCount - 1) * 750;
 
-                        SDL_Log(
-                            "FRONT FLIP DETECTED | SCORE: %d",
-                            score
-                        );
+                            const int stuntScore =
+                                baseScore * comboCount;
 
+                            score += stuntScore;
 
-                        if (comboCount > 1)
-                        {
+                            // Reward extra boost for difficult stunts.
+                            boostMeter +=
+                                50.0f + (frontflipCount - 1) * 25.0f;
+
+                            boostMeter = std::min(
+                                boostMeter, MAX_BOOST
+                            );
+
+                            const char* stuntName =
+                                frontflipCount == 1 ? "FRONT FLIP!" :
+                                frontflipCount == 2 ? "DOUBLE FRONT FLIP!" :
+                                "TRIPLE FRONT FLIP!";
+
                             SDL_snprintf(
                                 stuntText,
                                 sizeof(stuntText),
-                                "FRONT FLIP! +%d   COMBO x%d",
+                                "%s +%d COMBO x%d",
+                                stuntName,
                                 stuntScore,
                                 comboCount
                             );
-                        }
-                        else
-                        {
-                            SDL_snprintf(
-                                stuntText,
-                                sizeof(stuntText),
-                                "FRONT FLIP! +%d",
+
+                            stuntTextTimer = 1.5f;
+
+                            SDL_Log(
+                                "%d FRONT FLIP(S) | SCORE: %d",
+                                frontflipCount,
                                 stuntScore
                             );
                         }
-
-
-                        stuntTextTimer =
-                            1.2f;
                     }
+
 
                     if (negativeFlipCompleted)
                     {
-                        comboCount++;
+                        // One full rotation is approximately 2 * PI.
+                        constexpr float FULL_ROTATION = 6.2831853f;
 
-                        comboTimer =
-                            COMBO_WINDOW;
+                        // Keep our existing flip threshold of 5.5 radians.
+                        constexpr float FLIP_TOLERANCE =
+                            FULL_ROTATION - 5.5f;
 
+                        // Count how many backflips happened in this jump.
+                        int backflipCount = static_cast<int>(
+                            std::floor(
+                                (-accumulatedRotation + FLIP_TOLERANCE)
+                                / FULL_ROTATION
+                            )
+                            );
 
-                        const int baseFlipScore =
-                            500;
+                        // Cap rewards at triple backflip for now.
+                        backflipCount = std::clamp(backflipCount, 0, 3);
 
-
-                        const int stuntScore =
-                            baseFlipScore *
-                            comboCount;
-
-
-                        score +=
-                            stuntScore;
-
-
-                        boostMeter +=
-                            50.0f;
-
-
-                        if (boostMeter > MAX_BOOST)
+                        if (backflipCount > 0)
                         {
-                            boostMeter =
-                                MAX_BOOST;
-                        }
+                            comboCount++;
+                            comboTimer = COMBO_WINDOW;
 
+                            // Bigger rewards for multiple rotations.
+                            const int baseScore =
+                                500 + (backflipCount - 1) * 750;
 
-                        SDL_Log(
-                            "BACKFLIP DETECTED | SCORE: %d",
-                            score
-                        );
+                            const int stuntScore =
+                                baseScore * comboCount;
 
+                            score += stuntScore;
 
-                        if (comboCount > 1)
-                        {
+                            // Reward extra boost for difficult stunts.
+                            boostMeter +=
+                                50.0f + (backflipCount - 1) * 25.0f;
+
+                            boostMeter = std::min(
+                                boostMeter, MAX_BOOST
+                            );
+
+                            const char* stuntName =
+                                backflipCount == 1 ? "BACKFLIP!" :
+                                backflipCount == 2 ? "DOUBLE BACKFLIP!" :
+                                "TRIPLE BACKFLIP!";
+
                             SDL_snprintf(
                                 stuntText,
                                 sizeof(stuntText),
-                                "BACKFLIP! +%d   COMBO x%d",
+                                "%s +%d COMBO x%d",
+                                stuntName,
                                 stuntScore,
                                 comboCount
                             );
-                        }
-                        else
-                        {
-                            SDL_snprintf(
-                                stuntText,
-                                sizeof(stuntText),
-                                "BACKFLIP! +%d",
+
+                            stuntTextTimer = 1.5f;
+
+                            SDL_Log(
+                                "%d BACKFLIP(S) | SCORE: %d",
+                                backflipCount,
                                 stuntScore
                             );
                         }
-
-
-                        stuntTextTimer =
-                            1.2f;
                     }
+
 
                     if (perfectLanding)
                     {

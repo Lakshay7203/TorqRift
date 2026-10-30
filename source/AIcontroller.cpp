@@ -545,6 +545,28 @@ InputState BuildAIInput(
             );
 
 
+        // =================================================
+        // TERRAIN-AWARE SPEED CONTROL
+        // =================================================
+
+        // Different AI personalities have different
+        // speed limits when approaching steep descents.
+        float safeDescentSpeed =
+            9.0f * profile.speedMultiplier;
+
+        bool steepDescentAhead =
+            aheadSlope < -0.40f;
+
+        bool approachingTooFast =
+            velocity.x > safeDescentSpeed;
+
+        if (steepDescentAhead && approachingTooFast)
+        {
+            // Reduce motor speed before the descent.
+            input.driveForward = false;
+        }
+
+
         bool approachingCrest =
             currentSlope > 0.10f &&
             aheadSlope <
@@ -673,24 +695,40 @@ InputState BuildAIInput(
         // LANDING RECOVERY
         // =============================================
 
-        if (state.action ==
-            AIAction::LandingRecovery)
+
+        if (state.action == AIAction::LandingRecovery)
         {
-            constexpr float deadZone =
-                0.07f;
+            // Read the bike's current rotation speed.
+            float angularVelocity =
+                b2Body_GetAngularVelocity(
+                    bike.chassisBodyId
+                );
 
+            // Predict the bike's angle 0.15 seconds ahead.
+            constexpr float predictionTime = 0.15f;
 
-            if (angle > deadZone)
+            float predictedAngle =
+                angle + angularVelocity * predictionTime;
+
+            // Keep the predicted angle in [-PI, PI].
+            constexpr float TWO_PI = 6.2831853f;
+
+            predictedAngle =
+                std::remainder(predictedAngle, TWO_PI);
+
+            constexpr float deadZone = 0.10f;
+
+            // Correct the predicted landing orientation.
+            if (predictedAngle > deadZone)
             {
-                input.leanForward =
-                    true;
+                input.leanForward = true;
             }
-            else if (angle < -deadZone)
+            else if (predictedAngle < -deadZone)
             {
-                input.leanBackward =
-                    true;
+                input.leanBackward = true;
             }
         }
+
     }
 
 
@@ -754,6 +792,7 @@ void ApplyAIStabilityAssist(
     // Match the bike's balance target to the terrain.
     float targetAngle = 0.0f;
 
+
     if (bikeGrounded)
     {
         float rearX = b2Body_GetPosition(
@@ -772,12 +811,44 @@ void ApplyAIStabilityAssist(
             terrainSegments, frontX
         );
 
-        // Average both wheel slopes for smoother transitions.
         float averageSlope =
             (rearSlope + frontSlope) * 0.5f;
 
         targetAngle = std::atan(averageSlope);
     }
+    else if (state.action == AIAction::LandingRecovery)
+    {
+        // Estimate where the bike is heading.
+        b2Vec2 position = b2Body_GetPosition(
+            bike.chassisBodyId
+        );
+
+        b2Vec2 velocity = b2Body_GetLinearVelocity(
+            bike.chassisBodyId
+        );
+
+        constexpr float predictionTime = 0.20f;
+
+        float predictedX =
+            position.x + velocity.x * predictionTime;
+
+        // Sample the terrain near the expected landing.
+        float predictedSlope = GetTerrainSlopeAtX(
+            terrainSegments,
+            predictedX
+        );
+
+        // Convert terrain slope into a target bike angle.
+        targetAngle = std::atan(predictedSlope);
+
+        // Avoid extreme landing corrections.
+        targetAngle = std::clamp(
+            targetAngle,
+            -0.35f,
+            0.35f
+        );
+    }
+
 
     float angleError = targetAngle - angle;
 
