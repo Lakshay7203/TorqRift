@@ -4967,7 +4967,7 @@ void Render(
         int textHeight = 0;
 
         if (TTF_GetStringSize(
-            stuntFont,
+            countdownFont,
             countdownText,
             0,
             &textWidth,

@@ -47,6 +47,11 @@ struct AIState
 
     bool initialized = false;
 
+    // AI stuck detection
+    float lastProgressX = 0.0f;
+    float stuckTimer = 0.0f;
+    bool isStuck = false;
+
     bool wasGrounded = true;
 
     float actionTimer = 0.0f;
