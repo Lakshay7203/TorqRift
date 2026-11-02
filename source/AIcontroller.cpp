@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <SDL3/SDL.h>
 
 
 // =====================================================
@@ -153,6 +154,9 @@ InputState BuildAIInput(
     {
         state.initialized = true;
 
+        state.lastProgressX =
+            b2Body_GetPosition(bike.chassisBodyId).x;
+
         // Prevent all racers doing the same thing
         // at exactly the same time.
         state.wheelieCooldown =
@@ -185,6 +189,52 @@ InputState BuildAIInput(
         );
 
 
+    // =====================================================
+    // AI STUCK DETECTION
+    // =====================================================
+
+    constexpr float MIN_PROGRESS = 0.75f;
+    constexpr float STUCK_TIME = 1.5f;
+
+    if (!bikeGrounded)
+    {
+        // Don't classify normal jumps as being stuck.
+        state.lastProgressX = position.x;
+        state.stuckTimer = 0.0f;
+        state.isStuck = false;
+    }
+    else
+    {
+        float progress =
+            position.x - state.lastProgressX;
+
+        if (progress >= MIN_PROGRESS)
+        {
+            // Racer has moved forward enough.
+            state.lastProgressX = position.x;
+            state.stuckTimer = 0.0f;
+            state.isStuck = false;
+        }
+        else
+        {
+            // Not enough forward progress yet.
+            state.stuckTimer += deltaTime;
+
+            if (state.stuckTimer >= STUCK_TIME &&
+                !state.isStuck)
+            {
+                state.isStuck = true;
+
+                SDL_Log(
+                    "AI %d STUCK at X: %.2f",
+                    racerIndex + 1,
+                    position.x
+                );
+            }
+        }
+    }
+
+
     // =================================================
     // TIMERS
     // =================================================
@@ -208,6 +258,44 @@ InputState BuildAIInput(
             0.0f,
             state.wheelieCooldown - deltaTime
         );
+
+
+    // =================================================
+    // AI STUCK RECOVERY
+    // =================================================
+
+    if (state.isStuck &&
+        bikeGrounded &&
+        state.hopCooldown <= 0.0f)
+    {
+        // Attempt to jump over the obstacle.
+        input.jumpPressed = true;
+
+        // Keep driving forward.
+        input.driveForward = true;
+
+        // Lean forward to help control the bike.
+        input.leanForward = true;
+
+        // Avoid continuously attempting recovery.
+        state.hopCooldown = 2.5f;
+
+        // Restart stuck detection.
+        state.stuckTimer = 0.0f;
+        state.lastProgressX = position.x;
+        state.isStuck = false;
+
+        state.action = AIAction::BunnyHop;
+        state.wasGrounded = bikeGrounded;
+
+        SDL_Log(
+            "AI %d RECOVERY HOP at X: %.2f",
+            racerIndex + 1,
+            position.x
+        );
+
+        return input;
+    }
 
 
     // =================================================
@@ -443,11 +531,40 @@ InputState BuildAIInput(
             );
 
 
+        // Faster racers look farther ahead.
+        float lookAheadDistance = std::clamp(
+            std::max(velocity.x, 0.0f) * 0.35f,
+            2.5f,
+            5.0f
+        );
+
         float aheadSlope =
             GetTerrainSlopeAtX(
                 terrainSegments,
-                position.x + 2.5f
+                position.x + lookAheadDistance
             );
+
+
+        // =================================================
+        // TERRAIN-AWARE SPEED CONTROL
+        // =================================================
+
+        // Different AI personalities have different
+        // speed limits when approaching steep descents.
+        float safeDescentSpeed =
+            9.0f * profile.speedMultiplier;
+
+        bool steepDescentAhead =
+            aheadSlope < -0.40f;
+
+        bool approachingTooFast =
+            velocity.x > safeDescentSpeed;
+
+        if (steepDescentAhead && approachingTooFast)
+        {
+            // Reduce motor speed before the descent.
+            input.driveForward = false;
+        }
 
 
         bool approachingCrest =
@@ -578,24 +695,40 @@ InputState BuildAIInput(
         // LANDING RECOVERY
         // =============================================
 
-        if (state.action ==
-            AIAction::LandingRecovery)
+
+        if (state.action == AIAction::LandingRecovery)
         {
-            constexpr float deadZone =
-                0.07f;
+            // Read the bike's current rotation speed.
+            float angularVelocity =
+                b2Body_GetAngularVelocity(
+                    bike.chassisBodyId
+                );
 
+            // Predict the bike's angle 0.15 seconds ahead.
+            constexpr float predictionTime = 0.15f;
 
-            if (angle > deadZone)
+            float predictedAngle =
+                angle + angularVelocity * predictionTime;
+
+            // Keep the predicted angle in [-PI, PI].
+            constexpr float TWO_PI = 6.2831853f;
+
+            predictedAngle =
+                std::remainder(predictedAngle, TWO_PI);
+
+            constexpr float deadZone = 0.10f;
+
+            // Correct the predicted landing orientation.
+            if (predictedAngle > deadZone)
             {
-                input.leanForward =
-                    true;
+                input.leanForward = true;
             }
-            else if (angle < -deadZone)
+            else if (predictedAngle < -deadZone)
             {
-                input.leanBackward =
-                    true;
+                input.leanBackward = true;
             }
         }
+
     }
 
 
@@ -659,6 +792,7 @@ void ApplyAIStabilityAssist(
     // Match the bike's balance target to the terrain.
     float targetAngle = 0.0f;
 
+
     if (bikeGrounded)
     {
         float rearX = b2Body_GetPosition(
@@ -677,12 +811,44 @@ void ApplyAIStabilityAssist(
             terrainSegments, frontX
         );
 
-        // Average both wheel slopes for smoother transitions.
         float averageSlope =
             (rearSlope + frontSlope) * 0.5f;
 
         targetAngle = std::atan(averageSlope);
     }
+    else if (state.action == AIAction::LandingRecovery)
+    {
+        // Estimate where the bike is heading.
+        b2Vec2 position = b2Body_GetPosition(
+            bike.chassisBodyId
+        );
+
+        b2Vec2 velocity = b2Body_GetLinearVelocity(
+            bike.chassisBodyId
+        );
+
+        constexpr float predictionTime = 0.20f;
+
+        float predictedX =
+            position.x + velocity.x * predictionTime;
+
+        // Sample the terrain near the expected landing.
+        float predictedSlope = GetTerrainSlopeAtX(
+            terrainSegments,
+            predictedX
+        );
+
+        // Convert terrain slope into a target bike angle.
+        targetAngle = std::atan(predictedSlope);
+
+        // Avoid extreme landing corrections.
+        targetAngle = std::clamp(
+            targetAngle,
+            -0.35f,
+            0.35f
+        );
+    }
+
 
     float angleError = targetAngle - angle;
 
