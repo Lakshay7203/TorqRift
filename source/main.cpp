@@ -16,6 +16,7 @@
 #include <string>
 #include <fstream>
 #include <sstream>
+#include "AudioManager.h"
 
 // ---------------------------------------------------------
 // CONSTANTS
@@ -5074,7 +5075,9 @@ int main(int argc, char* argv[])
     // INITIALIZE SDL
     // -----------------------------------------------------
 
-    if (!SDL_Init(SDL_INIT_VIDEO))
+
+    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO))
+
     {
         SDL_Log(
             "SDL initialization failed: %s",
@@ -5655,6 +5658,9 @@ int main(int argc, char* argv[])
     float countdownTimer = 3.0f;
     bool raceStarted = false;
 
+    // Tracks which countdown number already played a sound.
+    int lastCountdownSound = -1;
+
     float airTime = 0.0f;
     bool wasBikeGrounded = true;
 
@@ -5723,6 +5729,12 @@ int main(int argc, char* argv[])
     // =====================================================
     // MAIN GAME LOOP
     // =====================================================
+    AudioManager audio;
+
+    if (!audio.Init())
+    {
+        SDL_Log("Audio initialization failed.");
+    }
 
     while (running)
     {
@@ -5743,6 +5755,58 @@ int main(int argc, char* argv[])
 
 
         // ============================================
+        // HAUNTED RUN AUDIO
+        // ============================================
+
+        const bool inRace =
+            currentScreen == GameScreen::Race &&
+            !levelComplete;
+
+
+        audio.SetMusic(inRace);
+        audio.SetAmbience(inRace);
+
+        // ============================================
+        // DYNAMIC MOTORCYCLE ENGINE AUDIO
+        // ============================================
+
+        if (inRace && raceStarted && !playerRacer.finished)
+        {
+            // Get the motorcycle's current velocity.
+            b2Vec2 velocity = b2Body_GetLinearVelocity(
+                playerRacer.bike.chassisBodyId
+            );
+
+            float speed = std::abs(velocity.x);
+
+            if (boostActive)
+            {
+                // Boost has priority.
+                audio.SetEngine(GameSound::EngineBoost);
+            }
+            else if (speed > 2.0f)
+            {
+                // Normal riding.
+                audio.SetEngine(GameSound::EngineRide);
+            }
+            else
+            {
+                // Standing still or moving slowly.
+                audio.SetEngine(GameSound::EngineIdle);
+            }
+        }
+        else
+        {
+            // Stop engine outside active gameplay.
+            audio.SetEngine(GameSound::None);
+        }
+
+        // Update looping audio every frame.
+        audio.Update();
+
+
+
+        // ============================================
         // MAIN GARAGE MENU
         // ============================================
 
@@ -5756,7 +5820,7 @@ int main(int argc, char* argv[])
             const bool* keys =
                 SDL_GetKeyboardState(nullptr);
 
-
+            int previousMenuSelection = mainMenuSelection;
 
 
             if (keys[SDL_SCANCODE_UP] && !menuUpHeld)
@@ -5774,7 +5838,10 @@ int main(int argc, char* argv[])
             menuUpHeld = keys[SDL_SCANCODE_UP];
             menuDownHeld = keys[SDL_SCANCODE_DOWN];
 
-
+            if (mainMenuSelection != previousMenuSelection)
+            {
+                audio.Play(GameSound::MenuMove, 0.30f);
+            }
 
             bool enterDown =
                 keys[SDL_SCANCODE_RETURN] ||
@@ -5788,6 +5855,9 @@ int main(int argc, char* argv[])
 
             if (enterPressed)
             {
+                audio.Play(GameSound::MenuSelect, 0.45f);
+
+
                 switch (mainMenuSelection)
                 {
                 case 0:
@@ -6173,6 +6243,8 @@ int main(int argc, char* argv[])
             const bool* keys =
                 SDL_GetKeyboardState(nullptr);
 
+            int previousRiderSelection = riderMenuSelection;
+
             if (keys[SDL_SCANCODE_UP] && !menuUpHeld)
             {
                 riderMenuSelection =
@@ -6189,6 +6261,12 @@ int main(int argc, char* argv[])
             menuUpHeld = keys[SDL_SCANCODE_UP];
             menuDownHeld = keys[SDL_SCANCODE_DOWN];
 
+            // Play sound when changing riders.
+            if (riderMenuSelection != previousRiderSelection)
+            {
+                audio.Play(GameSound::MenuMove, 0.30f);
+            }
+
             bool enterDown =
                 keys[SDL_SCANCODE_RETURN] ||
                 keys[SDL_SCANCODE_KP_ENTER];
@@ -6203,6 +6281,8 @@ int main(int argc, char* argv[])
                 if (enterPressed)
                 {
                     selectedRider = riderMenuSelection;
+
+                    audio.Play(GameSound::MenuSelect, 0.45f);
 
                     // Update saved rider selection.
                     saveData.selectedRider = selectedRider;
@@ -6270,6 +6350,9 @@ int main(int argc, char* argv[])
 
             if (enterPressed)
             {
+                // Play level confirmation sound.
+                audio.Play(GameSound::MenuSelect, 0.45f);
+
                 selectedLevel = 1;
 
                 currentScreen = GameScreen::Race;
@@ -6327,6 +6410,8 @@ int main(int argc, char* argv[])
             // UP / DOWN SELECTION
             // --------------------------------
 
+            int previousPauseSelection = pauseMenuSelection;
+
             if (keys[SDL_SCANCODE_UP] && !menuUpHeld)
             {
                 pauseMenuSelection =
@@ -6341,6 +6426,13 @@ int main(int argc, char* argv[])
 
             menuUpHeld = keys[SDL_SCANCODE_UP];
             menuDownHeld = keys[SDL_SCANCODE_DOWN];
+
+            // Play a sound only when the selection changes.
+            if (pauseMenuSelection != previousPauseSelection)
+            {
+                audio.Play(GameSound::MenuMove, 0.30f);
+            }
+
 
             // --------------------------------
             // ENTER
@@ -6370,6 +6462,8 @@ int main(int argc, char* argv[])
 
             if (enterPressed)
             {
+                audio.Play(GameSound::MenuSelect, 0.45f);
+
                 if (pauseMenuSelection == 0)
                 {
                     // Resume.
@@ -6523,6 +6617,8 @@ int main(int argc, char* argv[])
 
             if (levelComplete)
             {
+                int previousResultsSelection = resultsMenuSelection;
+
                 if (keys[SDL_SCANCODE_UP] && !menuUpHeld)
                 {
                     resultsMenuSelection =
@@ -6538,8 +6634,16 @@ int main(int argc, char* argv[])
                 menuUpHeld = keys[SDL_SCANCODE_UP];
                 menuDownHeld = keys[SDL_SCANCODE_DOWN];
 
+                // Play sound when switching results options.
+                if (resultsMenuSelection != previousResultsSelection)
+                {
+                    audio.Play(GameSound::MenuMove, 0.30f);
+                }
+
                 if (enterPressed)
                 {
+                    audio.Play(GameSound::MenuSelect, 0.45f);
+
                     restartRaceRequested = true;
                     physicsAccumulator = 0.0f;
 
@@ -6629,17 +6733,39 @@ int main(int argc, char* argv[])
         // LEVEL TIMER
         // ---------------------------------------------
 
-        // Countdown before the race
-        if (!raceStarted)
+
+
+        if (currentScreen == GameScreen::Race &&
+            !raceStarted &&
+            !levelComplete)
         {
+
+        
+            // Determine which number the player sees.
+            int countdownNumber =
+                countdownTimer > 2.0f ? 3 :
+                countdownTimer > 1.0f ? 2 : 1;
+
+            // Play only once when the number changes.
+            if (countdownNumber != lastCountdownSound)
+            {
+                audio.Play(GameSound::CountdownTick, 0.35f);
+                lastCountdownSound = countdownNumber;
+            }
+
             countdownTimer -= deltaTime;
 
             if (countdownTimer <= 0.0f)
             {
                 countdownTimer = 0.0f;
                 raceStarted = true;
+
+                // Race begins!
+                audio.Play(GameSound::CountdownGo, 0.60f);
+                audio.Play(GameSound::EngineStart, 0.40f);
             }
         }
+
 
         // Shared race clock for all racers
         if (raceStarted &&
@@ -6676,6 +6802,7 @@ int main(int argc, char* argv[])
                 countdownTimer = 3.0f;
                 raceStarted = false;
 
+                lastCountdownSound = -1;
                 score = 0;
 
                 checkpointScore = 0;
@@ -6911,6 +7038,8 @@ int main(int argc, char* argv[])
                     playerRacer.bike,
                     3.5f
                 );
+
+                audio.Play(GameSound::Jump, 0.48f);
             }
 
             // ---------------------------------------------
@@ -7146,15 +7275,27 @@ int main(int argc, char* argv[])
 
                 constexpr float FLIP_THRESHOLD = 5.5f;
 
+
                 if (accumulatedRotation >= FLIP_THRESHOLD)
                 {
+                    if (!positiveFlipCompleted)
+                    {
+                        audio.Play(GameSound::FlipWhoosh, 0.42f);
+                    }
+
                     positiveFlipCompleted = true;
                 }
 
                 if (accumulatedRotation <= -FLIP_THRESHOLD)
                 {
+                    if (!negativeFlipCompleted)
+                    {
+                        audio.Play(GameSound::FlipWhoosh, 0.42f);
+                    }
+
                     negativeFlipCompleted = true;
                 }
+
 
                 previousBikeAngle =
                     currentBikeAngle;
@@ -7168,6 +7309,9 @@ int main(int argc, char* argv[])
                 boostMeter >= MAX_BOOST)
             {
                 boostActive = true;
+
+                audio.Play(GameSound::BoostStart, 0.65f);
+
                 UpdateBikeControls(
                     playerRacer.bike,
                     input,
@@ -7248,6 +7392,22 @@ int main(int argc, char* argv[])
                         );
 
 
+                    // ============================================
+                    // LANDING SOUND
+                    // ============================================
+                    if (airTime >= 0.12f)
+                    {
+                        if (airTime >= 1.20f)
+                        {
+                            audio.Play(GameSound::LandingHard, 0.48f);
+                        }
+                        else
+                        {
+                            audio.Play(GameSound::LandingSoft, 0.48f);
+                        }
+                    }
+
+
                     bool perfectLanding =
                         airTime >= PERFECT_LANDING_MIN_AIRTIME &&
 
@@ -7321,6 +7481,22 @@ int main(int argc, char* argv[])
                                 frontflipCount,
                                 stuntScore
                             );
+
+
+                            // Choose a reward sound based on completed flips.
+                            GameSound rewardSound = GameSound::StuntSingle;
+
+                            if (frontflipCount == 2)
+                            {
+                                rewardSound = GameSound::StuntDouble;
+                            }
+                            else if (frontflipCount >= 3)
+                            {
+                                rewardSound = GameSound::StuntTriple;
+                            }
+
+                            audio.Play(rewardSound, 0.55f);
+
                         }
                     }
 
@@ -7388,6 +7564,21 @@ int main(int argc, char* argv[])
                                 backflipCount,
                                 stuntScore
                             );
+
+
+                            GameSound rewardSound = GameSound::StuntSingle;
+
+                            if (backflipCount == 2)
+                            {
+                                rewardSound = GameSound::StuntDouble;
+                            }
+                            else if (backflipCount >= 3)
+                            {
+                                rewardSound = GameSound::StuntTriple;
+                            }
+
+                            audio.Play(rewardSound, 0.55f);
+
                         }
                     }
 
@@ -7539,6 +7730,18 @@ int main(int argc, char* argv[])
             playerRacer.finishPlace =
                 nextFinishPlace;
 
+
+            // Play race-completion feedback once.
+            audio.Play(GameSound::RaceFinish, 0.65f);
+
+            // First Haunted Run victory.
+            if (playerRacer.finishPlace == 1 &&
+                !hasWonHauntedRun)
+            {
+                audio.Play(GameSound::Unlock, 0.58f);
+            }
+
+
             if (playerRacer.finishPlace == 1)
             {
                 hasWonHauntedRun = true;
@@ -7608,6 +7811,8 @@ int main(int argc, char* argv[])
             playerPosition.x >= CHECKPOINT_X)
         {
             checkpointReached = true;
+
+            audio.Play(GameSound::Checkpoint, 0.58f);
 
             respawnPosition =
                 b2Vec2{ CHECKPOINT_X, -1.5f };
@@ -7904,6 +8109,9 @@ int main(int argc, char* argv[])
 
     SDL_DestroyTexture(secondRiderBikeTexture);
     SDL_DestroyTexture(secondRiderWheelTexture);
+
+    // Shut down audio while SDL is still initialized.
+    audio.Shutdown();
 
     SDL_DestroyRenderer(
         renderer
